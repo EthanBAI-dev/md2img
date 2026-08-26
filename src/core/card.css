@@ -1,0 +1,707 @@
+/* ============================================================
+   卡片渲染样式：1080×1440 画布内的一切排版都在这里
+   所有字号以 1080 宽为基准，--pm-u 是可缩放的像素单位
+   ============================================================ */
+
+.pm-card {
+  --pm-font-scale: 1;
+  --pm-u: calc(1px * var(--pm-font-scale));
+
+  --pm-font-sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Source Han Sans SC', 'Microsoft YaHei',
+    -apple-system, 'Helvetica Neue', sans-serif;
+  --pm-font-serif: 'Songti SC', 'STSong', 'Source Han Serif SC', 'Noto Serif SC', Georgia, serif;
+  --pm-font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'PingFang SC', monospace;
+  --pm-font-body: var(--pm-font-sans);
+  --pm-font-title: var(--pm-font-sans);
+
+  position: relative;
+  box-sizing: border-box;
+  width: 1080px;
+  height: 1440px;
+  padding: 92px 84px 72px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--pm-bg);
+  color: var(--pm-fg);
+  font-family: var(--pm-font-body);
+  font-size: calc(36 * var(--pm-u));
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.pm-card * {
+  box-sizing: border-box;
+}
+
+/* 装饰层：各主题自己填内容 */
+.pm-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---------- 页眉 / 页脚 ---------- */
+.pm-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 44px;
+  font-size: calc(26 * var(--pm-u));
+  color: var(--pm-muted);
+  letter-spacing: 0.04em;
+  flex: none;
+  z-index: 1;
+}
+.pm-head-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--pm-accent);
+  flex: none;
+}
+.pm-head-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pm-foot {
+  flex: none;
+  height: 56px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  font-size: calc(24 * var(--pm-u));
+  color: var(--pm-muted);
+  letter-spacing: 0.06em;
+  z-index: 1;
+}
+.pm-foot-r {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- 正文区 ---------- */
+.pm-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  z-index: 1;
+}
+.pm-body > *:first-child {
+  margin-top: 0 !important;
+}
+.pm-body > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.pm-body p {
+  margin: 0 0 calc(28 * var(--pm-u));
+  line-height: 1.78;
+  letter-spacing: 0.01em;
+}
+
+.pm-body h1,
+.pm-body h2,
+.pm-body h3,
+.pm-body h4 {
+  font-family: var(--pm-font-title);
+  color: var(--pm-heading);
+  line-height: 1.4;
+  margin: calc(42 * var(--pm-u)) 0 calc(24 * var(--pm-u));
+  font-weight: 700;
+}
+.pm-body h1 {
+  font-size: calc(51 * var(--pm-u));
+}
+.pm-body h2 {
+  font-size: calc(44 * var(--pm-u));
+}
+.pm-body h3 {
+  font-size: calc(38 * var(--pm-u));
+}
+.pm-body h4 {
+  font-size: calc(35 * var(--pm-u));
+}
+
+.pm-body strong {
+  font-weight: 700;
+  color: var(--pm-strong);
+}
+.pm-body em {
+  font-style: normal;
+  background: var(--pm-mark);
+  padding: 0 6px;
+  border-radius: 4px;
+}
+.pm-body del {
+  color: var(--pm-muted);
+}
+.pm-body a {
+  color: var(--pm-accent);
+  text-decoration: none;
+  border-bottom: 2px solid var(--pm-accent-soft);
+}
+
+/* 列表 */
+.pm-body ul,
+.pm-body ol {
+  margin: 0 0 calc(28 * var(--pm-u));
+  padding-left: calc(42 * var(--pm-u));
+}
+.pm-body li {
+  margin-bottom: calc(14 * var(--pm-u));
+  line-height: 1.72;
+  padding-left: calc(6 * var(--pm-u));
+}
+.pm-body li::marker {
+  color: var(--pm-accent);
+  font-weight: 700;
+}
+.pm-body li > ul,
+.pm-body li > ol {
+  margin-top: calc(14 * var(--pm-u));
+  margin-bottom: 0;
+}
+
+/* 引用 */
+.pm-body blockquote {
+  margin: 0 0 calc(30 * var(--pm-u));
+  padding: calc(24 * var(--pm-u)) calc(30 * var(--pm-u));
+  background: var(--pm-quote-bg);
+  border-left: 8px solid var(--pm-accent);
+  border-radius: 0 12px 12px 0;
+  color: var(--pm-quote-fg);
+}
+.pm-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* 代码 */
+.pm-body code {
+  font-family: var(--pm-font-mono);
+  font-size: 0.86em;
+  background: var(--pm-inline-code-bg);
+  color: var(--pm-inline-code-fg);
+  padding: 3px 10px;
+  border-radius: 8px;
+}
+.pm-body pre.pm-code {
+  margin: 0 0 calc(30 * var(--pm-u));
+  padding: calc(28 * var(--pm-u)) calc(30 * var(--pm-u));
+  background: var(--pm-code-bg);
+  border: 1px solid var(--pm-code-border);
+  border-radius: 18px;
+  overflow: hidden;
+}
+.pm-body pre.pm-code code {
+  display: block;
+  background: none;
+  padding: 0;
+  color: var(--pm-code-fg);
+  font-size: calc(26 * var(--pm-u));
+  line-height: 1.62;
+  white-space: pre-wrap;
+  /* anywhere 只在整行放不下时才断，不像 break-all 会把 0.01 拆成 0.0 / 1 */
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* 表格 */
+.pm-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 calc(30 * var(--pm-u));
+  font-size: calc(29 * var(--pm-u));
+}
+.pm-body th,
+.pm-body td {
+  border: 1px solid var(--pm-border);
+  padding: calc(14 * var(--pm-u)) calc(18 * var(--pm-u));
+  text-align: left;
+}
+.pm-body th {
+  background: var(--pm-th-bg);
+  font-weight: 700;
+  color: var(--pm-heading);
+}
+
+/* 图片 */
+.pm-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 16px;
+  margin: 0 auto calc(30 * var(--pm-u));
+}
+
+/* 公式 */
+.pm-math-block {
+  margin: 0 0 calc(30 * var(--pm-u));
+  padding: calc(20 * var(--pm-u)) calc(18 * var(--pm-u));
+  background: var(--pm-math-bg);
+  border-radius: 14px;
+  text-align: center;
+  overflow-x: hidden;
+  font-size: calc(34 * var(--pm-u));
+  color: var(--pm-fg);
+}
+.pm-math-block .katex-display {
+  margin: 0;
+}
+.pm-math-inline {
+  color: var(--pm-fg);
+}
+.pm-math-inline .katex {
+  font-size: 1.02em;
+}
+.pm-math-error {
+  background: #ffe3e3;
+  color: #c92a2a;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: var(--pm-font-mono);
+  font-size: 0.85em;
+}
+/* KaTeX 太宽时缩放而不是溢出裁掉 */
+.pm-math-block .katex {
+  max-width: 100%;
+}
+
+/* ---------- 封面 ---------- */
+.pm-cover .pm-cover-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  z-index: 1;
+}
+.pm-badge {
+  align-self: flex-start;
+  font-size: calc(28 * var(--pm-u));
+  letter-spacing: 0.12em;
+  padding: 12px 28px;
+  border-radius: 999px;
+  background: var(--pm-badge-bg);
+  color: var(--pm-badge-fg);
+  margin-bottom: calc(44 * var(--pm-u));
+  font-weight: 600;
+}
+.pm-cover-title {
+  margin: 0;
+  font-family: var(--pm-font-title);
+  font-weight: 800;
+  line-height: 1.24;
+  letter-spacing: -0.01em;
+  color: var(--pm-cover-fg, var(--pm-heading));
+  word-break: break-word;
+}
+/* 标题文字单独包一层：主题要做荧光笔、描边这类效果时才能贴着文字走，
+   而不是铺满整个行盒（h1 是 flex 子元素，会被强制块级化） */
+.pm-cover-title-text {
+  display: inline;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.pm-cover-rule {
+  width: 120px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--pm-accent);
+  margin: calc(44 * var(--pm-u)) 0 calc(36 * var(--pm-u));
+}
+.pm-cover-sub {
+  margin: 0;
+  font-size: calc(33 * var(--pm-u));
+  line-height: 1.6;
+  color: var(--pm-cover-sub, var(--pm-muted));
+  max-width: 82%;
+}
+.pm-cover .pm-foot {
+  color: var(--pm-cover-sub, var(--pm-muted));
+}
+
+/* ---------- 代码高亮（跟随主题变量） ---------- */
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: var(--pm-hl-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition {
+  color: var(--pm-hl-string);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--pm-hl-number);
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--pm-hl-comment);
+  font-style: italic;
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+  color: var(--pm-hl-func);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-property {
+  color: var(--pm-hl-attr);
+}
+.hljs-built_in,
+.hljs-class .hljs-title,
+.hljs-type {
+  color: var(--pm-hl-type);
+}
+
+/* ---------- 测量容器：高度放开，其余保持一致 ---------- */
+.pm-measure-card {
+  height: auto !important;
+  min-height: 0 !important;
+}
+.pm-measure-card .pm-body {
+  overflow: visible !important;
+  height: auto !important;
+  flex: none !important;
+}
+
+/* ============================================================
+   主题 1：奶油暖橘 —— 通用首选
+   ============================================================ */
+.pm-card[data-theme='cream'] {
+  --pm-bg: #fdf6ec;
+  --pm-fg: #3b332b;
+  --pm-heading: #2a231c;
+  --pm-strong: #d95f2b;
+  --pm-muted: #a2917f;
+  --pm-accent: #f2733e;
+  --pm-accent-soft: #fbcfba;
+  --pm-border: #e8dcc9;
+  --pm-mark: #ffe0b2;
+  --pm-quote-bg: #f7ecdc;
+  --pm-quote-fg: #6b5a48;
+  --pm-code-bg: #f6ece0;
+  --pm-code-border: #e8dcc9;
+  --pm-code-fg: #4a3f34;
+  --pm-inline-code-bg: #f2e2cf;
+  --pm-inline-code-fg: #c1552a;
+  --pm-th-bg: #f5e9d8;
+  --pm-math-bg: #f8efe3;
+  --pm-badge-bg: #f2733e;
+  --pm-badge-fg: #fff8f2;
+  --pm-hl-keyword: #c1552a;
+  --pm-hl-string: #7a8b3f;
+  --pm-hl-number: #b8860b;
+  --pm-hl-comment: #b0a08c;
+  --pm-hl-func: #b4622e;
+  --pm-hl-attr: #8a6d3b;
+  --pm-hl-type: #a0522d;
+}
+.pm-card[data-theme='cream'] .pm-deco::before {
+  content: '';
+  position: absolute;
+  top: -180px;
+  right: -180px;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(242, 115, 62, 0.16), rgba(242, 115, 62, 0) 70%);
+}
+.pm-card[data-theme='cream'] .pm-deco::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 12px;
+  background: linear-gradient(90deg, #f2733e 0%, #f2a03e 50%, transparent 100%);
+}
+
+/* ============================================================
+   主题 2：水墨极简 —— 干货 / 书摘 / 学术
+   ============================================================ */
+.pm-card[data-theme='ink'] {
+  --pm-bg: #ffffff;
+  --pm-fg: #23201d;
+  --pm-heading: #100e0c;
+  --pm-strong: #c0392b;
+  --pm-muted: #9a948d;
+  --pm-accent: #c0392b;
+  --pm-accent-soft: #f0c9c4;
+  --pm-border: #e4e0da;
+  --pm-mark: #f6e7c9;
+  --pm-quote-bg: #f8f7f4;
+  --pm-quote-fg: #5c564f;
+  --pm-code-bg: #f8f7f4;
+  --pm-code-border: #e4e0da;
+  --pm-code-fg: #33302c;
+  --pm-inline-code-bg: #f0eeea;
+  --pm-inline-code-fg: #a03327;
+  --pm-th-bg: #f5f3f0;
+  --pm-math-bg: #faf9f7;
+  --pm-badge-bg: #23201d;
+  --pm-badge-fg: #ffffff;
+  --pm-font-title: var(--pm-font-serif);
+  --pm-hl-keyword: #a03327;
+  --pm-hl-string: #4f6d3f;
+  --pm-hl-number: #8a6d3b;
+  --pm-hl-comment: #aaa49c;
+  --pm-hl-func: #2f5d7c;
+  --pm-hl-attr: #7a5c2e;
+  --pm-hl-type: #6b4c8a;
+}
+.pm-card[data-theme='ink'] .pm-cover-title {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pm-card[data-theme='ink'] .pm-cover-rule {
+  width: 88px;
+  height: 6px;
+}
+.pm-card[data-theme='ink'] .pm-deco::before {
+  content: '';
+  position: absolute;
+  inset: 40px;
+  border: 2px solid #efece7;
+  pointer-events: none;
+}
+.pm-card[data-theme='ink'] .pm-body h2 {
+  padding-left: 24px;
+  border-left: 8px solid var(--pm-accent);
+}
+
+/* ============================================================
+   主题 3：多巴胺 —— 大字报 / 情绪化封面
+   ============================================================ */
+.pm-card[data-theme='dopamine'] {
+  --pm-bg: linear-gradient(150deg, #ff5f9e 0%, #ff7a5c 45%, #7c5cff 100%);
+  --pm-fg: #ffffff;
+  --pm-heading: #ffffff;
+  --pm-strong: #fff27a;
+  --pm-muted: rgba(255, 255, 255, 0.75);
+  --pm-accent: #fff27a;
+  --pm-accent-soft: rgba(255, 242, 122, 0.5);
+  --pm-border: rgba(255, 255, 255, 0.28);
+  --pm-mark: rgba(255, 242, 122, 0.32);
+  --pm-quote-bg: rgba(255, 255, 255, 0.16);
+  --pm-quote-fg: #ffffff;
+  --pm-code-bg: rgba(0, 0, 0, 0.24);
+  --pm-code-border: rgba(255, 255, 255, 0.2);
+  --pm-code-fg: #fdf6ec;
+  --pm-inline-code-bg: rgba(255, 255, 255, 0.2);
+  --pm-inline-code-fg: #fff27a;
+  --pm-th-bg: rgba(255, 255, 255, 0.16);
+  --pm-math-bg: rgba(255, 255, 255, 0.14);
+  --pm-badge-bg: rgba(255, 255, 255, 0.92);
+  --pm-badge-fg: #e0407a;
+  --pm-hl-keyword: #ffb3d1;
+  --pm-hl-string: #c9f5a0;
+  --pm-hl-number: #ffe08a;
+  --pm-hl-comment: rgba(255, 255, 255, 0.55);
+  --pm-hl-func: #a5e6ff;
+  --pm-hl-attr: #ffd6a5;
+  --pm-hl-type: #d9c4ff;
+}
+.pm-card[data-theme='dopamine'] .pm-cover-title {
+  font-weight: 900;
+  line-height: 1.18;
+  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+}
+.pm-card[data-theme='dopamine'] .pm-deco::before {
+  content: '';
+  position: absolute;
+  bottom: -160px;
+  left: -120px;
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+}
+.pm-card[data-theme='dopamine'] .pm-body h2 {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 8px 24px;
+  border-radius: 14px;
+}
+
+/* ============================================================
+   主题 4：暗夜科技 —— 代码 / 技术干货
+   ============================================================ */
+.pm-card[data-theme='midnight'] {
+  --pm-bg: #12151d;
+  --pm-fg: #d5dae6;
+  --pm-heading: #f2f5fa;
+  --pm-strong: #22d3ee;
+  --pm-muted: #6b7488;
+  --pm-accent: #22d3ee;
+  --pm-accent-soft: rgba(34, 211, 238, 0.35);
+  --pm-border: #262c3a;
+  --pm-mark: rgba(167, 139, 250, 0.28);
+  --pm-quote-bg: #191d28;
+  --pm-quote-fg: #a8b0c2;
+  --pm-code-bg: #0d1017;
+  --pm-code-border: #232936;
+  --pm-code-fg: #d5dae6;
+  --pm-inline-code-bg: #1c2130;
+  --pm-inline-code-fg: #22d3ee;
+  --pm-th-bg: #191d28;
+  --pm-math-bg: #181c26;
+  --pm-badge-bg: rgba(34, 211, 238, 0.16);
+  --pm-badge-fg: #22d3ee;
+  --pm-hl-keyword: #ff7b9c;
+  --pm-hl-string: #a5e075;
+  --pm-hl-number: #f6c177;
+  --pm-hl-comment: #5b6376;
+  --pm-hl-func: #82aaff;
+  --pm-hl-attr: #c792ea;
+  --pm-hl-type: #7fdbca;
+}
+.pm-card[data-theme='midnight'] .pm-deco::before {
+  content: '';
+  position: absolute;
+  top: -220px;
+  left: -140px;
+  width: 620px;
+  height: 620px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.14), transparent 68%);
+}
+.pm-card[data-theme='midnight'] .pm-deco::after {
+  content: '';
+  position: absolute;
+  right: -160px;
+  bottom: -200px;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.16), transparent 68%);
+}
+.pm-card[data-theme='midnight'] .pm-cover-title {
+  text-shadow: 0 0 60px rgba(34, 211, 238, 0.25);
+}
+
+/* ============================================================
+   主题 5：方格笔记本 —— 学习笔记 / 公式推导
+   ============================================================ */
+.pm-card[data-theme='grid'] {
+  --pm-bg: #f7faff;
+  --pm-fg: #2b3445;
+  --pm-heading: #16203a;
+  --pm-strong: #2f6bff;
+  --pm-muted: #97a3ba;
+  --pm-accent: #2f6bff;
+  --pm-accent-soft: #bcd0ff;
+  --pm-border: #dbe4f3;
+  --pm-mark: #fff3a3;
+  --pm-quote-bg: #ecf2ff;
+  --pm-quote-fg: #47536b;
+  --pm-code-bg: #eef3fc;
+  --pm-code-border: #dbe4f3;
+  --pm-code-fg: #33405a;
+  --pm-inline-code-bg: #e3ebfb;
+  --pm-inline-code-fg: #2451c7;
+  --pm-th-bg: #e8effc;
+  --pm-math-bg: #ffffff;
+  --pm-badge-bg: #2f6bff;
+  --pm-badge-fg: #ffffff;
+  --pm-hl-keyword: #2451c7;
+  --pm-hl-string: #2e7d5b;
+  --pm-hl-number: #b5651d;
+  --pm-hl-comment: #9aa6bd;
+  --pm-hl-func: #6b3fa0;
+  --pm-hl-attr: #b5651d;
+  --pm-hl-type: #0e7490;
+}
+/* 网格纸底纹 */
+.pm-card[data-theme='grid'] .pm-deco {
+  background-image: linear-gradient(rgba(47, 107, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 107, 255, 0.1) 1px, transparent 1px);
+  background-size: 54px 54px;
+}
+.pm-card[data-theme='grid'] .pm-body h2 {
+  display: inline-block;
+  background: linear-gradient(180deg, transparent 62%, #ffe98a 62%);
+  padding: 0 8px;
+}
+.pm-card[data-theme='grid'] .pm-math-block {
+  border: 2px dashed var(--pm-accent-soft);
+}
+.pm-card[data-theme='grid'] .pm-cover-title-text {
+  background: linear-gradient(180deg, transparent 64%, rgba(47, 107, 255, 0.2) 64%);
+  padding: 0 8px;
+  margin-left: -8px;
+}
+
+/* ============================================================
+   主题 6：杂志风 —— 大留白 / 长文摘录
+   ============================================================ */
+.pm-card[data-theme='magazine'] {
+  --pm-bg: #f1efea;
+  --pm-fg: #33302a;
+  --pm-heading: #1c1a17;
+  --pm-strong: #a67c3d;
+  --pm-muted: #a09a90;
+  --pm-accent: #a67c3d;
+  --pm-accent-soft: #ddccb0;
+  --pm-border: #ddd8cf;
+  --pm-mark: #ece0c8;
+  --pm-quote-bg: #e9e5dd;
+  --pm-quote-fg: #57524a;
+  --pm-code-bg: #eae6de;
+  --pm-code-border: #ddd8cf;
+  --pm-code-fg: #3c382f;
+  --pm-inline-code-bg: #e4dfd5;
+  --pm-inline-code-fg: #8a6229;
+  --pm-th-bg: #e8e3da;
+  --pm-math-bg: #f6f4f0;
+  --pm-badge-bg: transparent;
+  --pm-badge-fg: #a67c3d;
+  --pm-font-title: var(--pm-font-serif);
+  --pm-hl-keyword: #8a6229;
+  --pm-hl-string: #5b6e45;
+  --pm-hl-number: #9a5b2c;
+  --pm-hl-comment: #aca69b;
+  --pm-hl-func: #45607a;
+  --pm-hl-attr: #7a5c2e;
+  --pm-hl-type: #6b4c8a;
+}
+.pm-card[data-theme='magazine'] {
+  padding: 108px 96px 76px;
+}
+.pm-card[data-theme='magazine'] .pm-badge {
+  border: 2px solid var(--pm-accent);
+  letter-spacing: 0.24em;
+  font-weight: 500;
+}
+.pm-card[data-theme='magazine'] .pm-cover-title {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.pm-card[data-theme='magazine'] .pm-cover-rule {
+  width: 200px;
+  height: 2px;
+  background: var(--pm-accent);
+}
+.pm-card[data-theme='magazine'] .pm-deco::before {
+  content: '';
+  position: absolute;
+  top: 76px;
+  left: 96px;
+  right: 96px;
+  height: 2px;
+  background: var(--pm-accent);
+  opacity: 0.5;
+}
+.pm-card[data-theme='magazine'] .pm-body h2 {
+  font-size: calc(41 * var(--pm-u));
+  letter-spacing: 0.02em;
+}

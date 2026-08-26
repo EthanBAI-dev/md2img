@@ -1,0 +1,713 @@
+:root {
+  --ui-bg: #f6f7f9;
+  --ui-panel: #ffffff;
+  --ui-fg: #1f2430;
+  --ui-muted: #7b8494;
+  --ui-border: #e4e7ed;
+  --ui-accent: #ff2e4d;
+  --ui-accent-soft: #ffe8ec;
+  --ui-blue: #2f6bff;
+  --ui-radius: 12px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ui-bg: #14161b;
+    --ui-panel: #1c1f26;
+    --ui-fg: #e6e9ef;
+    --ui-muted: #8b93a3;
+    --ui-border: #2a2e38;
+    --ui-accent: #ff4d67;
+    --ui-accent-soft: #3a1f27;
+    --ui-blue: #5b8cff;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+  font: 14px/1.6 'PingFang SC', -apple-system, 'Segoe UI', system-ui, sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--ui-panel);
+  border-bottom: 1px solid var(--ui-border);
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+  min-width: 0; /* 允许子元素的 ellipsis 生效 */
+  flex: 1 1 auto;
+}
+.brand-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  align-self: center;
+  flex: none;
+}
+.brand b {
+  flex: none;
+}
+.brand-sub {
+  color: var(--ui-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+.topbar-actions .btn {
+  white-space: nowrap;
+}
+
+/* ---------- 主体布局 ---------- */
+.layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(340px, 420px) 1fr;
+  gap: 14px;
+  padding: 14px;
+  overflow: hidden;
+}
+/* 全屏编辑（网页版）三栏：编辑器 | 样式+预览 | 文案，大体均分，编辑器是主要工作区多给一点 */
+.layout--3col {
+  grid-template-columns: minmax(360px, 1.15fr) minmax(360px, 1fr) minmax(340px, 0.9fr);
+}
+@media (max-width: 1160px) {
+  /* 窗口不够宽就退回两栏：文案挤到编辑器下面，不然每栏都会窄得没法用 */
+  .layout--3col {
+    grid-template-columns: minmax(340px, 420px) 1fr;
+  }
+  .layout--3col .col--copy {
+    grid-column: 1;
+  }
+}
+/* 侧边栏是单栏纵向流：笔记内容、样式、预览、文案都在同一个可滚动列里，
+   每块占自己的自然高度，不需要手动分配空间 */
+.app--panel .layout {
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  overflow: hidden;
+}
+.app--panel .col {
+  flex: 1 1 auto;
+}
+
+.col {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- 面板 ---------- */
+.panel {
+  flex: none;
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  padding: 12px 14px 14px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.panel-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.counter {
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hint {
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.hint a {
+  color: var(--ui-blue);
+}
+
+/* ---------- 表单控件 ---------- */
+.editor,
+textarea,
+input[type='text'],
+input[type='password'],
+input:not([type]) {
+  width: 100%;
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+}
+.editor {
+  min-height: 240px;
+  height: 34vh;
+  font-family: 'SF Mono', Menlo, Consolas, 'PingFang SC', monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  tab-size: 2;
+}
+.app--panel .editor {
+  height: 180px;
+  min-height: 140px;
+}
+.app--web .col--edit .editor {
+  height: 62vh;
+}
+textarea:focus,
+input:focus,
+.editor:focus {
+  outline: 2px solid var(--ui-accent-soft);
+  border-color: var(--ui-accent);
+}
+
+/* ---------- 编辑器工具栏：参考 Madopic 的图标条，按功能分组，组间留个小间隔 ---------- */
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ui-border);
+}
+.md-toolbar-group {
+  display: flex;
+  gap: 2px;
+}
+.md-toolbar-group + .md-toolbar-group {
+  padding-left: 8px;
+  border-left: 1px solid var(--ui-border);
+}
+.md-toolbar-btn {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ui-fg);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.md-toolbar-btn:hover {
+  background: var(--ui-bg);
+  border-color: var(--ui-border);
+}
+.md-tb--bold {
+  font-weight: 700;
+}
+.md-tb--italic {
+  font-style: italic;
+}
+.md-tb--strike {
+  text-decoration: line-through;
+}
+
+.field {
+  margin-bottom: 14px;
+}
+.field > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ui-muted);
+  margin-bottom: 6px;
+}
+.field-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* AI 文风档位：分段控件样式，三档等宽，侧边栏窄也能一行放下 */
+.tone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.tone-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.tone-group {
+  flex: 1;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+}
+.tone-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ui-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.tone-btn:hover {
+  color: var(--ui-text);
+}
+.tone-btn.is-active {
+  background: var(--ui-accent);
+  color: #fff;
+}
+
+.control-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.control-row input[type='range'] {
+  flex: 1;
+  accent-color: var(--ui-accent);
+}
+.control-row--checks {
+  gap: 14px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.control-row--checks label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* ---------- 按钮 ---------- */
+.btn {
+  border: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+  color: var(--ui-fg);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--ui-accent);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn--primary {
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+  color: #fff;
+  font-weight: 600;
+}
+.btn--accent {
+  background: var(--ui-blue);
+  border-color: var(--ui-blue);
+  color: #fff;
+  font-weight: 600;
+}
+.btn--ghost {
+  background: transparent;
+}
+.btn--sm {
+  padding: 6px 11px;
+  font-size: 12px;
+}
+.btn--xs {
+  padding: 4px 9px;
+  font-size: 11.5px;
+}
+
+/* ---------- 主题选择：色块方框 + 名称，三列网格 ---------- */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.theme-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ui-fg);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.theme-box:hover {
+  border-color: var(--ui-accent);
+}
+.theme-box.is-active {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+}
+.theme-box.is-active .theme-name {
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+.theme-swatch {
+  display: block;
+  width: 100%;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--ui-border);
+}
+
+/* ---------- 文案面板 ---------- */
+.title-options,
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.title-chip {
+  border: 1px solid var(--ui-border);
+  background: transparent;
+  color: var(--ui-fg);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.title-chip.is-active {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  padding: 4px 6px 4px 11px;
+  font-size: 12px;
+  color: var(--ui-blue);
+}
+.tag button {
+  border: 0;
+  background: transparent;
+  color: var(--ui-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+/* ---------- 预览：横向胶片带，高度只随缩放变化，不随卡片数量变化 ---------- */
+.col--preview {
+  gap: 10px;
+}
+.panel--preview {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.preview-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.preview-controls .counter {
+  margin-right: 4px;
+}
+.preview-viewport {
+  position: relative;
+}
+.preview-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  padding: 2px 2px 10px;
+  transition: height 0.15s ease;
+  scrollbar-width: thin;
+}
+/* 浮在图片上方的翻页按钮：半透明圆形，不挤占预览区的横向空间。
+   平常浅灰、鼠标移上去才变深灰，图标本身也跟着换成白色以保持对比度 */
+.preview-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+  color: #4a4a4a;
+  background: rgba(140, 140, 140, 0.28);
+  backdrop-filter: blur(2px);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.preview-nav:hover {
+  background: rgba(50, 50, 50, 0.75);
+  color: #fff;
+}
+.preview-nav--left {
+  left: 8px;
+}
+.preview-nav--right {
+  right: 8px;
+}
+.preview-track::-webkit-scrollbar {
+  height: 8px;
+}
+.preview-track::-webkit-scrollbar-thumb {
+  background: var(--ui-border);
+  border-radius: 999px;
+}
+.preview-track::-webkit-scrollbar-thumb:hover {
+  background: var(--ui-muted);
+}
+.preview-item {
+  position: relative;
+  flex: none;
+  margin: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+  background: #fff;
+  scroll-snap-align: start;
+}
+.preview-scaler {
+  transform-origin: top left;
+  width: 1080px;
+  height: 1440px;
+}
+.preview-item figcaption {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--ui-muted);
+  font-size: 13px;
+}
+.preview-empty span {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ---------- 提示 ---------- */
+.alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.alert {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff7e6;
+  color: #8a5a00;
+  border: 1px solid #ffe0a3;
+  font-size: 12px;
+}
+.alert--error {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+/* ---------- 底部操作条 ---------- */
+.actionbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--ui-panel);
+  border-top: 1px solid var(--ui-border);
+}
+.busy {
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+
+/* ---------- 弹窗 / Toast ---------- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+.modal {
+  width: min(420px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  border-radius: 14px;
+  padding: 16px 18px;
+}
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  background: rgba(20, 22, 27, 0.94);
+  color: #fff;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  z-index: 60;
+  pointer-events: none;
+}
+
+/* ---------- 公式报错清单 ---------- */
+.math-error-panel {
+  display: block;
+  padding: 10px 12px;
+}
+.math-error-title {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.math-error-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.math-error-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.math-error-tex {
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.math-error-msg {
+  flex: 1 1 auto;
+  min-width: 120px;
+  font-size: 11.5px;
+  opacity: 0.85;
+}
+.math-error-fail {
+  flex-basis: 100%;
+  font-size: 11px;
+  opacity: 0.85;
+}
+

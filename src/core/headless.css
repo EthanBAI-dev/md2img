@@ -1,0 +1,14 @@
+/* CLI 截图页：去掉一切多余留白，卡片之间留一点间隔方便肉眼核对 */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #ffffff;
+}
+
+#cards {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 1080px;
+}

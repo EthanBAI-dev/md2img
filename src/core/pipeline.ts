@@ -1,0 +1,87 @@
+import { parseBlocks, parseNote } from './markdown';
+import type { MathError } from './math';
+import { createMeasurer, paginate, waitForAssets } from './paginate';
+import { coverTitleSize, getTheme } from './themes';
+import { MAX_CARDS, type Card, type Note, type RenderOptions } from './types';
+
+export interface BuildResult {
+  note: Note;
+  cards: Card[];
+  warnings: string[];
+  /** 公式渲染出错的清单，供 UI 提供「AI 修复」这类针对性操作 */
+  mathErrors: MathError[];
+}
+
+/**
+ * 一次完整的构建：markdown → 笔记元信息 + 分好页的卡片列表。
+ * 依赖真实 DOM 测高，所以必须在浏览器环境里调用。
+ */
+export async function buildCards(
+  markdown: string,
+  options: RenderOptions,
+  defaultAuthor?: string,
+): Promise<BuildResult> {
+  const note = parseNote(markdown);
+  // frontmatter 没写 author 就用设置里存的默认署名兜底，不用每篇笔记都手写一遍
+  if (!note.author && defaultAuthor) note.author = defaultAuthor;
+  // 主题一律以界面选择为准；frontmatter 的 theme 只在打开文件时用来初始化选择器，
+  // 否则用户点了主题却不生效会很困惑
+  const themeId = options.themeId;
+
+  // mathErrors 单独交给 MathErrorPanel 处理（带「AI 修复」操作），不进 warnings 免得重复提示
+  const { blocks, mathErrors } = parseBlocks(note.body);
+  const warnings: string[] = [];
+
+  await waitForAssets();
+  const measurer = createMeasurer(themeId, options.fontScale);
+  let pages: ReturnType<typeof paginate>;
+  try {
+    // 封面占掉 1 张，内容页最多 MAX_CARDS - 1 张
+    pages = paginate(blocks, measurer, MAX_CARDS - 1, options.keepHeadingWithBody);
+  } finally {
+    measurer.dispose();
+  }
+
+  if (pages.truncated) {
+    warnings.push(`内容超过 ${MAX_CARDS} 张图的上限，已截断。建议拆成两篇笔记发。`);
+  }
+  if (pages.overflowPages.length) {
+    const list = pages.overflowPages.map((i) => i + 2).join('、');
+    warnings.push(`第 ${list} 页内容略微超出，可以调小字号或手动加 --- 分页。`);
+  }
+
+  const theme = getTheme(themeId);
+
+  const cards: Card[] = [
+    {
+      kind: 'cover',
+      index: 0,
+      title: note.title,
+      subtitle: note.subtitle,
+      badge: note.badge,
+      author: note.author,
+      titleSize: coverTitleSize(note.title, theme.coverBase),
+    },
+    ...pages.pages.map(
+      (blocks, i): Card => ({
+        kind: 'content',
+        index: i + 1,
+        header: note.title,
+        blocks,
+        author: note.author,
+      }),
+    ),
+  ];
+
+  return { note, cards, warnings, mathErrors };
+}
+
+/** 读取 frontmatter 里指定的主题，用于打开文件时初始化选择器 */
+export function themeFromMarkdown(markdown: string): string | null {
+  const declared = parseNote(markdown).theme;
+  if (!declared) return null;
+  return getTheme(declared).id === declared ? declared : null;
+}
+
+export { MAX_CARDS };
+export type { Card, Note, RenderOptions };

@@ -1,0 +1,40 @@
+{
+  "name": "textpic",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "文图 TextPIC —— 把 Markdown 笔记一键变成图文卡片：自动分页、公式支持、多套模板、AI 文案，并可选填入小红书创作台",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:ext": "vite build && tsx scripts/build-extension.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "cli": "tsx cli/index.ts"
+  },
+  "dependencies": {
+    "highlight.js": "^11.11.1",
+    "html-to-image": "^1.11.13",
+    "jszip": "^3.10.1",
+    "katex": "^0.16.22",
+    "markdown-it": "^14.1.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.323",
+    "@types/markdown-it": "^14.1.2",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "esbuild": "^0.25.4",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "optionalDependencies": {
+    "commander": "^13.1.0",
+    "playwright": "^1.52.0"
+  }
+}

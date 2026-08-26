@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-extension/
+out/
+*.local
+.DS_Store
+.env
+
+# 本地工具配置（Claude Code 的 dev server 启动项）
+.claude/
+
+# 自己的笔记草稿，不属于项目文档
+notes/
