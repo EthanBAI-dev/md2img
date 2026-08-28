@@ -323,6 +323,189 @@
   color: var(--pm-cover-sub, var(--pm-muted));
 }
 
+/* ---------- 水印 ---------- */
+.pm-watermark {
+  position: absolute;
+  z-index: 8;
+  max-width: 72%;
+  color: var(--pm-wm-color);
+  opacity: var(--pm-wm-opacity);
+  transform: rotate(var(--pm-wm-rotation));
+  transform-origin: center;
+  pointer-events: none;
+  user-select: none;
+}
+.pm-watermark--text {
+  font-size: var(--pm-wm-size);
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.pm-watermark--logo img {
+  display: block;
+  width: var(--pm-wm-size);
+  max-width: 240px;
+  max-height: 180px;
+  object-fit: contain;
+}
+.pm-watermark[data-position^='top-'] {
+  top: 62px;
+}
+.pm-watermark[data-position^='center-'],
+.pm-watermark[data-position='center'] {
+  top: 50%;
+}
+.pm-watermark[data-position^='bottom-'] {
+  bottom: 62px;
+}
+.pm-watermark[data-position$='-left'] {
+  left: 62px;
+}
+.pm-watermark[data-position$='-right'] {
+  right: 62px;
+}
+.pm-watermark[data-position$='-center'],
+.pm-watermark[data-position='center'] {
+  left: 50%;
+}
+.pm-watermark[data-position^='center-'] {
+  transform: translateY(-50%) rotate(var(--pm-wm-rotation));
+}
+.pm-watermark[data-position$='-center'],
+.pm-watermark[data-position='center'] {
+  transform: translateX(-50%) rotate(var(--pm-wm-rotation));
+}
+.pm-watermark[data-position='center'] {
+  transform: translate(-50%, -50%) rotate(var(--pm-wm-rotation));
+}
+
+/* ---------- 独立广告推广页 ---------- */
+.pm-ad {
+  --pm-ad-panel: color-mix(in srgb, var(--pm-accent) 10%, transparent);
+}
+.pm-ad-inner {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: center;
+  gap: 64px;
+}
+.pm-ad-copy {
+  min-width: 0;
+}
+.pm-ad-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  margin-bottom: 42px;
+  padding: 8px 22px;
+  border: 2px solid var(--pm-accent);
+  border-radius: 999px;
+  color: var(--pm-accent);
+  font-size: 25px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.pm-ad-title {
+  margin: 0;
+  color: var(--pm-heading);
+  font-family: var(--pm-font-title);
+  font-size: 76px;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
+}
+.pm-ad-description {
+  margin: 38px 0 50px;
+  color: var(--pm-fg);
+  font-size: 32px;
+  line-height: 1.7;
+}
+.pm-ad-account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px 30px;
+  border-left: 8px solid var(--pm-accent);
+  border-radius: 0 18px 18px 0;
+  background: var(--pm-ad-panel);
+}
+.pm-ad-account strong {
+  color: var(--pm-heading);
+  font-size: 30px;
+}
+.pm-ad-account span {
+  color: var(--pm-muted);
+  font-size: 25px;
+  line-height: 1.5;
+}
+.pm-ad-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+.pm-ad-qr {
+  width: 280px;
+  height: 280px;
+  padding: 18px;
+  border-radius: 30px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.13);
+}
+.pm-ad-qr-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.pm-ad-qr-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 4px dashed #d9dce3;
+  border-radius: 16px;
+  color: #9aa0ac;
+}
+.pm-ad-qr-placeholder span {
+  font-size: 58px;
+  line-height: 1;
+  font-weight: 900;
+}
+.pm-ad-qr-placeholder small {
+  font-size: 21px;
+}
+.pm-ad-cta {
+  color: var(--pm-accent);
+  font-size: 27px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.45;
+}
+.pm-ad[data-ad-template='product'] .pm-ad-eyebrow {
+  border: 0;
+  background: var(--pm-accent);
+  color: var(--pm-badge-fg);
+}
+.pm-ad[data-ad-template='product'] .pm-ad-qr {
+  transform: rotate(2deg);
+}
+.pm-ad[data-ad-template='course'] .pm-ad-inner {
+  padding: 44px;
+  border: 3px solid var(--pm-accent-soft);
+  border-radius: 40px;
+  background: var(--pm-ad-panel);
+}
+.pm-ad[data-ad-template='course'] .pm-ad-account {
+  background: var(--pm-bg);
+}
+
 /* ---------- 代码高亮（跟随主题变量） ---------- */
 .hljs-keyword,
 .hljs-selector-tag,

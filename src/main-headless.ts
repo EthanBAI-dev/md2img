@@ -4,7 +4,7 @@ import './core/headless.css';
 import { renderCardHTML } from './core/card';
 import { waitForAssets } from './core/paginate';
 import { buildCards } from './core/pipeline';
-import { DEFAULT_RENDER_OPTIONS, type RenderOptions } from './core/types';
+import { normalizeRenderOptions, type RenderOptions } from './core/types';
 
 export interface HeadlessResult {
   count: number;
@@ -30,7 +30,7 @@ declare global {
  */
 window.textpic = {
   async render(markdown, options) {
-    const opts: RenderOptions = { ...DEFAULT_RENDER_OPTIONS, ...options };
+    const opts: RenderOptions = normalizeRenderOptions(options);
     const { cards, note, warnings } = await buildCards(markdown, opts);
 
     const host = document.getElementById('cards');

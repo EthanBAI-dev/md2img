@@ -74,6 +74,8 @@ export async function ensureHostPermission(baseUrl: string): Promise<{ ok: boole
 export const KEYS = {
   markdown: 'pm.markdown',
   options: 'pm.options',
+  /** 独立广告推广页的内容与插入位置 */
+  ad: 'pm.adOptions',
   ai: 'pm.aiConfig',
   copy: 'pm.copy',
   /** 默认署名，笔记没写 author 时兜底用这个，不用每篇都手写 */

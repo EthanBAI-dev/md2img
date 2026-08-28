@@ -182,7 +182,8 @@ body {
 textarea,
 input[type='text'],
 input[type='password'],
-input:not([type]) {
+input:not([type]),
+select {
   width: 100%;
   background: var(--ui-bg);
   color: var(--ui-fg);
@@ -192,6 +193,10 @@ input:not([type]) {
   font-size: 13px;
   font-family: inherit;
   resize: vertical;
+}
+select {
+  appearance: auto;
+  resize: none;
 }
 .editor {
   min-height: 240px;
@@ -275,6 +280,95 @@ input:focus,
   display: flex;
   gap: 6px;
   margin-top: 6px;
+}
+
+/* 水印和推广页配置：默认收起到一个勾选项，启用后再显示紧凑表单。 */
+.feature-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.compact-field {
+  margin-bottom: 0;
+}
+.compact-field > label {
+  margin-bottom: 4px;
+}
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.inline-control,
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inline-control select {
+  flex: 1;
+}
+.upload-thumb {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  object-fit: contain;
+  padding: 2px;
+  border: 1px solid var(--ui-border);
+  border-radius: 7px;
+  background: #fff;
+}
+.segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+}
+.segmented-control button {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px;
+  background: transparent;
+  color: var(--ui-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.segmented-control button.is-active {
+  background: var(--ui-panel);
+  color: var(--ui-accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+}
+.color-input {
+  width: 100%;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+  cursor: pointer;
+}
+.dense-control {
+  margin-top: 0;
+}
+.dense-control > label {
+  min-width: 42px;
+}
+.dense-control .counter {
+  min-width: 42px;
+  text-align: right;
 }
 
 /* AI 文风档位：分段控件样式，三档等宽，侧边栏窄也能一行放下 */
@@ -428,6 +522,12 @@ input:focus,
 }
 
 /* ---------- 文案面板 ---------- */
+.copy-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
 .title-options,
 .preset-row {
   display: flex;
@@ -449,6 +549,18 @@ input:focus,
   border-color: var(--ui-accent);
   background: var(--ui-accent-soft);
   color: var(--ui-accent);
+}
+.editable-title-row,
+.tag-entry-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.editable-title-row input,
+.tag-entry-row input {
+  flex: 1;
+  min-width: 0;
 }
 .tag-list {
   display: flex;

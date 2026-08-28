@@ -53,6 +53,18 @@ export type Card =
       header?: string;
       blocks: Block[];
       author?: string;
+    }
+  | {
+      kind: 'ad';
+      index: number;
+      template: AdTemplate;
+      eyebrow: string;
+      title: string;
+      description: string;
+      cta: string;
+      accountName: string;
+      accountIntro: string;
+      qrDataUrl: string;
     };
 
 /** 笔记 frontmatter + 正文 */
@@ -79,7 +91,95 @@ export interface RenderOptions {
    * 排版上更整齐，代价是前一页会空出一块。关掉就优先塞满每一页。
    */
   keepHeadingWithBody: boolean;
+  /** 预览和导出共用的水印策略 */
+  watermark: WatermarkOptions;
 }
+
+export type WatermarkPlatform = 'global' | 'xiaohongshu' | 'wechat' | 'moments';
+export type WatermarkKind = 'text' | 'logo';
+export type WatermarkPosition =
+  | 'top-left'
+  | 'top-center'
+  | 'top-right'
+  | 'center-left'
+  | 'center'
+  | 'center-right'
+  | 'bottom-left'
+  | 'bottom-center'
+  | 'bottom-right';
+
+export interface WatermarkStyle {
+  kind: WatermarkKind;
+  text: string;
+  logoDataUrl: string;
+  opacity: number;
+  position: WatermarkPosition;
+  rotation: number;
+  size: number;
+  color: string;
+}
+
+export interface WatermarkOptions {
+  enabled: boolean;
+  /** 当前预览/导出使用哪套策略；global 是所有平台共用的默认策略 */
+  activePlatform: WatermarkPlatform;
+  profiles: Record<WatermarkPlatform, WatermarkStyle>;
+}
+
+export type AdTemplate = 'account' | 'product' | 'course';
+export type AdPlacement = 'after-cover' | 'end';
+
+export interface AdOptions {
+  enabled: boolean;
+  template: AdTemplate;
+  placement: AdPlacement;
+  eyebrow: string;
+  title: string;
+  description: string;
+  cta: string;
+  accountName: string;
+  accountIntro: string;
+  qrDataUrl: string;
+}
+
+export const DEFAULT_WATERMARK_STYLE: WatermarkStyle = {
+  kind: 'text',
+  text: '@你的账号',
+  logoDataUrl: '',
+  opacity: 0.18,
+  position: 'bottom-right',
+  rotation: -12,
+  size: 36,
+  color: '#1f2430',
+};
+
+function watermarkStyle(overrides: Partial<WatermarkStyle> = {}): WatermarkStyle {
+  return { ...DEFAULT_WATERMARK_STYLE, ...overrides };
+}
+
+export const DEFAULT_WATERMARK_OPTIONS: WatermarkOptions = {
+  enabled: false,
+  activePlatform: 'global',
+  profiles: {
+    global: watermarkStyle(),
+    xiaohongshu: watermarkStyle({ position: 'bottom-right' }),
+    wechat: watermarkStyle({ position: 'bottom-center', opacity: 0.14 }),
+    moments: watermarkStyle({ position: 'center', opacity: 0.1, rotation: -24 }),
+  },
+};
+
+export const DEFAULT_AD_OPTIONS: AdOptions = {
+  enabled: false,
+  template: 'account',
+  placement: 'end',
+  eyebrow: '关注我 · 持续更新',
+  title: '把复杂知识，讲得简单好懂',
+  description: '每周更新实用方法、案例拆解和可直接复用的模板。',
+  cta: '扫码关注 · 获取更多内容',
+  accountName: '@你的账号',
+  accountIntro: '专注分享高质量干货与实践经验',
+  qrDataUrl: '',
+};
 
 export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   themeId: 'cream',
@@ -87,7 +187,31 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   fontScale: 1,
   showAuthor: true,
   keepHeadingWithBody: true,
+  watermark: DEFAULT_WATERMARK_OPTIONS,
 };
+
+/** 兼容旧版本存储的浅层配置，并补齐后来新增的水印字段。 */
+export function normalizeRenderOptions(input?: Partial<RenderOptions>): RenderOptions {
+  const incomingWatermark = input?.watermark;
+  return {
+    ...DEFAULT_RENDER_OPTIONS,
+    ...input,
+    watermark: {
+      ...DEFAULT_WATERMARK_OPTIONS,
+      ...incomingWatermark,
+      profiles: {
+        global: watermarkStyle(incomingWatermark?.profiles?.global),
+        xiaohongshu: watermarkStyle(incomingWatermark?.profiles?.xiaohongshu),
+        wechat: watermarkStyle(incomingWatermark?.profiles?.wechat),
+        moments: watermarkStyle(incomingWatermark?.profiles?.moments),
+      },
+    },
+  };
+}
+
+export function normalizeAdOptions(input?: Partial<AdOptions>): AdOptions {
+  return { ...DEFAULT_AD_OPTIONS, ...input };
+}
 
 /** 网页版和 CLI 共用的一次完整输入 */
 export interface TextPicInput {

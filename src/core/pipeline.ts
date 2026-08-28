@@ -2,7 +2,14 @@ import { parseBlocks, parseNote } from './markdown';
 import type { MathError } from './math';
 import { createMeasurer, paginate, waitForAssets } from './paginate';
 import { coverTitleSize, getTheme } from './themes';
-import { MAX_CARDS, type Card, type Note, type RenderOptions } from './types';
+import {
+  MAX_CARDS,
+  normalizeAdOptions,
+  type AdOptions,
+  type Card,
+  type Note,
+  type RenderOptions,
+} from './types';
 
 export interface BuildResult {
   note: Note;
@@ -20,6 +27,7 @@ export async function buildCards(
   markdown: string,
   options: RenderOptions,
   defaultAuthor?: string,
+  adInput?: Partial<AdOptions>,
 ): Promise<BuildResult> {
   const note = parseNote(markdown);
   // frontmatter 没写 author 就用设置里存的默认署名兜底，不用每篇笔记都手写一遍
@@ -30,14 +38,15 @@ export async function buildCards(
 
   // mathErrors 单独交给 MathErrorPanel 处理（带「AI 修复」操作），不进 warnings 免得重复提示
   const { blocks, mathErrors } = parseBlocks(note.body);
+  const ad = normalizeAdOptions(adInput);
   const warnings: string[] = [];
 
   await waitForAssets();
   const measurer = createMeasurer(themeId, options.fontScale);
   let pages: ReturnType<typeof paginate>;
   try {
-    // 封面占掉 1 张，内容页最多 MAX_CARDS - 1 张
-    pages = paginate(blocks, measurer, MAX_CARDS - 1, options.keepHeadingWithBody);
+    // 封面占 1 张；启用推广页时再给它预留 1 张，保证总数仍符合平台上限。
+    pages = paginate(blocks, measurer, MAX_CARDS - 1 - (ad.enabled ? 1 : 0), options.keepHeadingWithBody);
   } finally {
     measurer.dispose();
   }
@@ -46,7 +55,8 @@ export async function buildCards(
     warnings.push(`内容超过 ${MAX_CARDS} 张图的上限，已截断。建议拆成两篇笔记发。`);
   }
   if (pages.overflowPages.length) {
-    const list = pages.overflowPages.map((i) => i + 2).join('、');
+    const adOffset = ad.enabled && ad.placement === 'after-cover' ? 1 : 0;
+    const list = pages.overflowPages.map((i) => i + 2 + adOffset).join('、');
     warnings.push(`第 ${list} 页内容略微超出，可以调小字号或手动加 --- 分页。`);
   }
 
@@ -73,6 +83,26 @@ export async function buildCards(
     ),
   ];
 
+  if (ad.enabled) {
+    const adCard: Card = {
+      kind: 'ad',
+      index: 0,
+      template: ad.template,
+      eyebrow: ad.eyebrow.slice(0, 20),
+      title: ad.title.slice(0, 32),
+      description: ad.description.slice(0, 120),
+      cta: ad.cta.slice(0, 30),
+      accountName: ad.accountName.slice(0, 20),
+      accountIntro: ad.accountIntro.slice(0, 44),
+      qrDataUrl: ad.qrDataUrl,
+    };
+    if (ad.placement === 'after-cover') cards.splice(1, 0, adCard);
+    else cards.push(adCard);
+    cards.forEach((card, index) => {
+      card.index = index;
+    });
+  }
+
   return { note, cards, warnings, mathErrors };
 }
 
@@ -84,4 +114,4 @@ export function themeFromMarkdown(markdown: string): string | null {
 }
 
 export { MAX_CARDS };
-export type { Card, Note, RenderOptions };
+export type { AdOptions, Card, Note, RenderOptions };

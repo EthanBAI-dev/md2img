@@ -63,6 +63,8 @@ export interface XhsCopy {
   body: string;
   /** 话题标签，不带 # */
   tags: string[];
+  /** 用户当前选中、发送到创作台的标题序号 */
+  selectedTitle?: number;
   /** 封面用的标题/副标题/分类标签，同一次调用顺带生成，省得再点一次 */
   cover: CoverMeta;
 }

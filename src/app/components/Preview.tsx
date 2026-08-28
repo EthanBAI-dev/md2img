@@ -146,6 +146,7 @@ export function Preview({ cards, options, variant }: Props) {
                 <figcaption>
                   {card.index + 1}
                   {card.kind === 'cover' ? ' · 封面' : ''}
+                  {card.kind === 'ad' ? ' · 推广页' : ''}
                 </figcaption>
               </figure>
             ))}

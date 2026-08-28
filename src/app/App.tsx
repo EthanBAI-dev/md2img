@@ -14,7 +14,16 @@ import { downloadBlob, exportCards, safeName, zipImages } from '../core/export';
 import { splitFrontmatterRaw, upsertFrontmatter } from '../core/markdown';
 import { buildFormulaLocators, type MathError } from '../core/math';
 import { buildCards, themeFromMarkdown, type BuildResult } from '../core/pipeline';
-import { DEFAULT_RENDER_OPTIONS, MAX_CARDS, type RenderOptions } from '../core/types';
+import {
+  DEFAULT_AD_OPTIONS,
+  DEFAULT_RENDER_OPTIONS,
+  MAX_CARDS,
+  normalizeAdOptions,
+  normalizeRenderOptions,
+  type AdOptions,
+  type RenderOptions,
+} from '../core/types';
+import { AdPanel } from './components/AdPanel';
 import { CopyPanel } from './components/CopyPanel';
 import { MarkdownToolbar } from './components/MarkdownToolbar';
 import { MathErrorPanel } from './components/MathErrorPanel';
@@ -22,6 +31,7 @@ import { Preview } from './components/Preview';
 import { SettingsDialog } from './components/SettingsDialog';
 import { ThemePicker } from './components/ThemePicker';
 import { TonePicker } from './components/TonePicker';
+import { WatermarkPanel } from './components/WatermarkPanel';
 import { blobToDataUrl, imageToDataUrl } from './fileUtils';
 import { KEYS, ensureHostPermission, isExtension, loadState, saveState, subscribeState } from './storage';
 import type { PublishPayload } from '../shared/messages';
@@ -36,6 +46,7 @@ interface Props {
 export function App({ variant }: Props) {
   const [markdown, setMarkdown] = useState(demoMarkdown);
   const [options, setOptions] = useState<RenderOptions>(DEFAULT_RENDER_OPTIONS);
+  const [adOptions, setAdOptions] = useState<AdOptions>(DEFAULT_AD_OPTIONS);
   const [aiConfig, setAiConfig] = useState<AiConfig>(DEFAULT_AI);
   const [defaultAuthor, setDefaultAuthor] = useState('');
   const [tone, setTone] = useState<ToneId>('prompt');
@@ -58,16 +69,18 @@ export function App({ variant }: Props) {
   // 恢复上次的编辑内容和设置
   useEffect(() => {
     (async () => {
-      const [md, opts, ai, savedCopy, author, savedTone] = await Promise.all([
+      const [md, opts, savedAd, ai, savedCopy, author, savedTone] = await Promise.all([
         loadState<string | null>(KEYS.markdown, null),
         loadState<RenderOptions>(KEYS.options, DEFAULT_RENDER_OPTIONS),
+        loadState<AdOptions>(KEYS.ad, DEFAULT_AD_OPTIONS),
         loadState<AiConfig>(KEYS.ai, DEFAULT_AI),
         loadState<XhsCopy | null>(KEYS.copy, null),
         loadState<string>(KEYS.defaultAuthor, ''),
         loadState<ToneId>(KEYS.tone, 'prompt'),
       ]);
       if (md) setMarkdown(md);
-      setOptions({ ...DEFAULT_RENDER_OPTIONS, ...opts });
+      setOptions(normalizeRenderOptions(opts));
+      setAdOptions(normalizeAdOptions(savedAd));
       setAiConfig({ ...DEFAULT_AI, ...ai });
       if (savedCopy) setCopy(savedCopy);
       setDefaultAuthor(author);
@@ -82,6 +95,9 @@ export function App({ variant }: Props) {
   useEffect(() => {
     if (restored) void saveState(KEYS.options, options);
   }, [options, restored]);
+  useEffect(() => {
+    if (restored) void saveState(KEYS.ad, adOptions);
+  }, [adOptions, restored]);
   useEffect(() => {
     if (restored) void saveState(KEYS.copy, copy);
   }, [copy, restored]);
@@ -101,7 +117,13 @@ export function App({ variant }: Props) {
     });
     const unsubOpts = subscribeState<RenderOptions>(KEYS.options, (incoming) => {
       setOptions((cur) => {
-        const merged = { ...DEFAULT_RENDER_OPTIONS, ...incoming };
+        const merged = normalizeRenderOptions(incoming);
+        return JSON.stringify(merged) !== JSON.stringify(cur) ? merged : cur;
+      });
+    });
+    const unsubAd = subscribeState<AdOptions>(KEYS.ad, (incoming) => {
+      setAdOptions((cur) => {
+        const merged = normalizeAdOptions(incoming);
         return JSON.stringify(merged) !== JSON.stringify(cur) ? merged : cur;
       });
     });
@@ -111,6 +133,7 @@ export function App({ variant }: Props) {
     return () => {
       unsubMd();
       unsubOpts();
+      unsubAd();
       unsubTone();
     };
   }, [restored]);
@@ -120,7 +143,7 @@ export function App({ variant }: Props) {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const built = await buildCards(markdown, options, defaultAuthor);
+        const built = await buildCards(markdown, options, defaultAuthor, adOptions);
         if (!cancelled) {
           setResult(built);
           setBuildError(null);
@@ -133,7 +156,7 @@ export function App({ variant }: Props) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [markdown, options, defaultAuthor]);
+  }, [markdown, options, defaultAuthor, adOptions]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -220,7 +243,7 @@ export function App({ variant }: Props) {
         .flatMap((c) => (c.kind === 'content' ? c.blocks.map((b) => b.text) : []))
         .join('\n');
       const generated = await generateCopy(result.note, plain, aiConfig, undefined, tone);
-      setCopy(generated);
+      setCopy({ ...generated, selectedTitle: 0 });
       // 顺带把封面标题/副标题/分类标签写回笔记源文本，不用自己手写 frontmatter，
       // 粘贴一段没有标题的内容也能直接生成完整的封面
       setMarkdown((md) =>
@@ -300,7 +323,7 @@ export function App({ variant }: Props) {
       setBusy('正在打开创作平台…');
       const payload: PublishPayload = {
         images: await Promise.all(images.map((i) => blobToDataUrl(i.blob))),
-        title: (copy?.titles[0] ?? result.note.title).slice(0, 20),
+        title: (copy?.titles[copy?.selectedTitle ?? 0] ?? copy?.titles[0] ?? result.note.title).slice(0, 20),
         body: copy?.body ?? '',
         tags: copy?.tags ?? result.note.tags,
         createdAt: Date.now(),
@@ -469,6 +492,10 @@ export function App({ variant }: Props) {
     </div>
   );
 
+  const adPanel = <AdPanel value={adOptions} onChange={setAdOptions} />;
+
+  const watermarkPanel = <WatermarkPanel options={options} onChange={setOptions} />;
+
   const copyPanel = (
     <CopyPanel
       copy={copy}
@@ -476,6 +503,19 @@ export function App({ variant }: Props) {
       error={copyError}
       onGenerate={handleGenerateCopy}
       onChange={setCopy}
+      onCreateManual={() =>
+        setCopy({
+          titles: [result?.note.title.slice(0, 20) ?? ''],
+          body: '',
+          tags: result?.note.tags.slice(0, 10) ?? [],
+          selectedTitle: 0,
+          cover: {
+            title: result?.note.title.slice(0, 16) ?? '',
+            subtitle: result?.note.subtitle?.slice(0, 24) ?? '',
+            badge: result?.note.badge?.slice(0, 6) ?? '',
+          },
+        })
+      }
     />
   );
 
@@ -533,9 +573,13 @@ export function App({ variant }: Props) {
         // 三栏：编辑器 | 样式 + 预览（样式在上边） | 文案，参考 Madopic 的左编右预，
         // 加一栏放我们特有的小红书文案（Madopic 没有这个，它没有发布场景）
         <main className="layout layout--3col">
-          <section className="col col--edit">{notePanel}</section>
+          <section className="col col--edit">
+            {notePanel}
+            {adPanel}
+          </section>
           <section className="col col--preview">
             {stylePanel}
+            {watermarkPanel}
             {previewSection}
           </section>
           <section className="col col--copy">{copyPanel}</section>
@@ -544,7 +588,9 @@ export function App({ variant }: Props) {
         <main className="layout">
           <section className="col">
             {notePanel}
+            {adPanel}
             {stylePanel}
+            {watermarkPanel}
             {previewSection}
             {copyPanel}
           </section>
