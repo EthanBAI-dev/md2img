@@ -11,12 +11,14 @@ import {
   type XhsCopy,
 } from '../core/ai';
 import { downloadBlob, exportCards, safeName, zipImages } from '../core/export';
-import { splitFrontmatterRaw, upsertFrontmatter } from '../core/markdown';
+import { maskImageSources, splitFrontmatterRaw, upsertFrontmatter } from '../core/markdown';
 import { buildFormulaLocators, type MathError } from '../core/math';
 import { buildCards, themeFromMarkdown, type BuildResult } from '../core/pipeline';
 import {
   DEFAULT_AD_OPTIONS,
   DEFAULT_RENDER_OPTIONS,
+  IMAGE_H_MAX,
+  IMAGE_H_MIN,
   MAX_CARDS,
   normalizeAdOptions,
   normalizeRenderOptions,
@@ -33,6 +35,7 @@ import { ThemePicker } from './components/ThemePicker';
 import { TonePicker } from './components/TonePicker';
 import { WatermarkPanel } from './components/WatermarkPanel';
 import { blobToDataUrl, imageToDataUrl } from './fileUtils';
+import { inlineImages, readFolder, type FolderNote } from './folderImport';
 import { KEYS, ensureHostPermission, isExtension, loadState, saveState, subscribeState } from './storage';
 import type { PublishPayload } from '../shared/messages';
 
@@ -62,7 +65,19 @@ export function App({ variant }: Props) {
   const [insertingImage, setInsertingImage] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
+  // 「打开文件夹」读进来的一批笔记和图片：图片只留在内存里，不写存储——
+  // 一个文件夹的图动辄上兆，网页版 localStorage 只有 5~10MB，塞进去会直接把保存搞挂。
+  // 真正会被持久化的是内联进 markdown 的那几张，体积可控。
+  const [folderNotes, setFolderNotes] = useState<FolderNote[]>([]);
+  const [folderImages, setFolderImages] = useState<Map<string, string>>(new Map());
+  // 笔记里的 <picture> 有手机/电脑两路候选，用哪一路影响很大：
+  // 电脑版通常是宽扁图（占高度小、卡片省），手机版是竖长图（更占版面）。
+  // 切换后要拿原始笔记文本重新内联一次，所以得记住当前是哪一篇。
+  const [currentNote, setCurrentNote] = useState<FolderNote | null>(null);
+  const [figureNarrow, setFigureNarrow] = useState(true);
+  const [folderLoading, setFolderLoading] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -162,6 +177,51 @@ export function App({ variant }: Props) {
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   }, []);
+
+  /** 把一篇笔记装进编辑器，并用文件夹里读到的图片把相对路径内联掉 */
+  const loadNote = useCallback(
+    (note: FolderNote, images: Map<string, string>, narrow: boolean) => {
+      const { markdown: inlined, inlined: count, missing } = inlineImages(note.text, images, narrow);
+      setMarkdown(inlined);
+      setCurrentNote(note);
+      const declared = themeFromMarkdown(inlined);
+      if (declared) setOptions((prev) => ({ ...prev, themeId: declared }));
+      const parts = [`已载入 ${note.name}`];
+      if (count) parts.push(`内联 ${count} 张${narrow ? '手机版' : '电脑版'}图`);
+      if (missing.length) parts.push(`${missing.length} 张没找到`);
+      showToast(parts.join('，'));
+    },
+    [showToast],
+  );
+
+  /** 切换手机版/电脑版配图：拿原始笔记文本重新内联一次 */
+  const switchFigureVariant = (narrow: boolean) => {
+    setFigureNarrow(narrow);
+    if (currentNote) loadNote(currentNote, folderImages, narrow);
+  };
+
+  const openFolder = async (files: FileList) => {
+    setFolderLoading('读取中…');
+    try {
+      const { notes, images, skipped } = await readFolder(files);
+      if (!notes.length) {
+        showToast('这个文件夹里没有 .md / .txt 笔记');
+        return;
+      }
+      setFolderNotes(notes);
+      setFolderImages(images);
+      // 只有一篇就直接打开；多篇时下面会出一个下拉，让用户自己挑
+      if (notes.length === 1) {
+        loadNote(notes[0], images, figureNarrow);
+      } else {
+        showToast(`读到 ${notes.length} 篇笔记、${images.size} 张图，选一篇开始${skipped.length ? `（${skipped.length} 张图过大已跳过）` : ''}`);
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '文件夹读取失败');
+    } finally {
+      setFolderLoading(null);
+    }
+  };
 
   const openFile = async (file: File) => {
     const text = await file.text();
@@ -267,7 +327,9 @@ export function App({ variant }: Props) {
     try {
       // frontmatter 原样保留，只把正文交给 AI 重新排版，避免它把 title/author 这些字段也改写了
       const { front, body } = splitFrontmatterRaw(markdown);
-      const formatted = await formatAsMarkdown(body, aiConfig);
+      // 图片地址换成短占位符再发：内联后一张图就是几万字符 base64，会把上下文占满
+      const { masked, restore } = maskImageSources(body);
+      const formatted = restore(await formatAsMarkdown(masked, aiConfig));
       setMarkdown(`${front}${front ? '\n' : ''}${formatted}\n`);
       showToast('已整理成 Markdown 格式');
     } catch (err) {
@@ -283,7 +345,8 @@ export function App({ variant }: Props) {
     try {
       // frontmatter 原样保留，只把正文交给 AI 润色，避免它把 title/author 这些字段也改写了
       const { front, body } = splitFrontmatterRaw(markdown);
-      const humanized = await humanizeMarkdown(body, tone, aiConfig);
+      const { masked, restore } = maskImageSources(body);
+      const humanized = restore(await humanizeMarkdown(masked, tone, aiConfig));
       setMarkdown(`${front}${front ? '\n' : ''}${humanized}\n`);
       showToast(`已按「${getTone(tone).label}」改写正文`);
     } catch (err) {
@@ -391,6 +454,58 @@ export function App({ variant }: Props) {
           if (file) await insertImageFile(file);
         }}
       />
+      {/* 一个文件夹里有多篇笔记时，图片只需读一次，切换笔记复用同一份图库 */}
+      {folderNotes.length > 1 && (
+        <div className="folder-row">
+          <span className="folder-label">文件夹（{folderImages.size} 张图）</span>
+          <select
+            className="folder-select"
+            value={currentNote?.path ?? ''}
+            onChange={(e) => {
+              const picked = folderNotes.find((n) => n.path === e.target.value);
+              if (picked) loadNote(picked, folderImages, figureNarrow);
+            }}
+          >
+            <option value="" disabled>
+              选一篇笔记…
+            </option>
+            {folderNotes.map((n) => (
+              <option key={n.path} value={n.path}>
+                {n.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {/* 笔记用 <picture> 给了手机/电脑两套图时才有得选 */}
+      {currentNote && folderImages.size > 0 && (
+        <div className="folder-row">
+          <span className="folder-label">配图版本</span>
+          <div className="tone-group" role="radiogroup" aria-label="配图版本">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={figureNarrow}
+              className={`tone-btn${figureNarrow ? ' is-active' : ''}`}
+              title="用作者给窄屏准备的竖版图，占版面大、细节多"
+              onClick={() => switchFigureVariant(true)}
+            >
+              手机版
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!figureNarrow}
+              className={`tone-btn${!figureNarrow ? ' is-active' : ''}`}
+              title="用宽扁的桌面版图，占高度小、卡片数更少"
+              onClick={() => switchFigureVariant(false)}
+            >
+              电脑版
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 文风档位放在两个 AI 按钮正上方：它同时决定「AI 去味」怎么改正文、
           以及右边「AI 生成」写出什么腔调的小红书文案，一处选择两处生效 */}
       <TonePicker tone={tone} onSelect={setTone} />
@@ -462,6 +577,21 @@ export function App({ variant }: Props) {
           onChange={(e) => setOptions({ ...options, fontScale: Number(e.target.value) })}
         />
         <span className="counter">{Math.round(options.fontScale * 100)}%</span>
+      </div>
+      {/* 竖图撑满卡片宽度后往往比一整页还高，这里封顶。图片切不开，
+          调小它是让竖图和正文挤进同一页最直接的办法 */}
+      <div className="control-row">
+        <label htmlFor="imageMaxHeight">图片高度</label>
+        <input
+          id="imageMaxHeight"
+          type="range"
+          min={IMAGE_H_MIN}
+          max={IMAGE_H_MAX}
+          step={20}
+          value={options.imageMaxHeight}
+          onChange={(e) => setOptions({ ...options, imageMaxHeight: Number(e.target.value) })}
+        />
+        <span className="counter">{options.imageMaxHeight}px</span>
       </div>
       <div className="control-row control-row--checks">
         <label>
@@ -552,6 +682,15 @@ export function App({ variant }: Props) {
           >
             打开文件
           </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            disabled={!!folderLoading}
+            onClick={() => folderRef.current?.click()}
+            title="选中笔记所在的整个文件夹，md 和图片一起读进来，笔记里的相对图片路径会自动内联"
+          >
+            {folderLoading ?? '打开文件夹'}
+          </button>
           <button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowSettings(true)}>
             设置
           </button>
@@ -564,6 +703,18 @@ export function App({ variant }: Props) {
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) void openFile(f);
+            e.target.value = '';
+          }}
+        />
+        <input
+          ref={folderRef}
+          type="file"
+          hidden
+          // webkitdirectory 不在 React 的类型表里，得手写成属性
+          {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files?.length) void openFolder(files);
             e.target.value = '';
           }}
         />

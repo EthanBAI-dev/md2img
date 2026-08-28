@@ -21,6 +21,7 @@ interface BuildOpts {
   out: string;
   theme: string;
   fontScale: string;
+  imageHeight: string;
   pageNumber: boolean;
   author: boolean;
   keepHeading: boolean;
@@ -41,6 +42,7 @@ async function renderFiles(inputs: string[], opts: BuildOpts) {
     ...DEFAULT_RENDER_OPTIONS,
     themeId: opts.theme,
     fontScale: Number(opts.fontScale),
+    imageMaxHeight: Number(opts.imageHeight),
     pageNumber: opts.pageNumber,
     showAuthor: opts.author,
     keepHeadingWithBody: opts.keepHeading,
@@ -128,6 +130,7 @@ program
   .option('-o, --out <dir>', '输出目录', './out')
   .option('-t, --theme <id>', `模板：${THEMES.map((t) => t.id).join(' / ')}`, 'cream')
   .option('-s, --font-scale <n>', '正文字号缩放 0.7~1.3', '1')
+  .option('--image-height <px>', '图片高度上限（卡片内像素，竖图太高会挤掉正文）', '900')
   .option('--no-page-number', '不显示页码')
   .option('--no-author', '不显示署名')
   .option('--no-keep-heading', '允许标题留在页尾，每页尽量塞满、减少空白')

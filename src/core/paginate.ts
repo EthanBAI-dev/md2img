@@ -6,6 +6,12 @@ interface Metrics {
   advance: number[];
   /** 本块自身的高度 */
   height: number[];
+  /**
+   * 这批块排在一起时正文区的真实总高。
+   * 不能拿 advance 累加来代替：advance 是相邻块 offsetTop 之差，
+   * 漏掉了首块自身的上边距，累加出来会偏小，导致溢出检测不出来、内容被裁掉。
+   */
+  total: number;
 }
 
 export interface Measurer {
@@ -17,10 +23,10 @@ export interface Measurer {
 
 /**
  * 建一个离屏的、与真实卡片完全同款的容器用于测高。
- * 关键点：宽度、内边距、字体、行高、主题变量都必须和最终渲染一致，
- * 否则测出来的高度和实际排版对不上，分页就会溢出。
+ * 关键点：宽度、内边距、字体、行高、主题变量、图片高度上限都必须和最终渲染一致，
+ * 只要有一处对不上，测出来的高度就是假的——分页会按错误高度装页，渲染时再溢出。
  */
-export function createMeasurer(themeId: string, fontScale: number): Measurer {
+export function createMeasurer(themeId: string, fontScale: number, imageMaxHeight: number): Measurer {
   const host = document.createElement('div');
   host.className = 'pm-measure-host';
   host.setAttribute('aria-hidden', 'true');
@@ -31,6 +37,7 @@ export function createMeasurer(themeId: string, fontScale: number): Measurer {
   gauge.className = 'pm-card pm-content';
   gauge.dataset.theme = themeId;
   gauge.style.setProperty('--pm-font-scale', String(fontScale));
+  gauge.style.setProperty('--pm-img-max-h', `${imageMaxHeight}px`);
   gauge.innerHTML =
     '<div class="pm-head"><span class="pm-head-dot"></span><span class="pm-head-text">标尺</span></div>' +
     '<div class="pm-body"></div>' +
@@ -41,6 +48,7 @@ export function createMeasurer(themeId: string, fontScale: number): Measurer {
   card.className = 'pm-card pm-content pm-measure-card';
   card.dataset.theme = themeId;
   card.style.setProperty('--pm-font-scale', String(fontScale));
+  card.style.setProperty('--pm-img-max-h', `${imageMaxHeight}px`);
 
   const body = document.createElement('div');
   body.className = 'pm-body';
@@ -74,12 +82,61 @@ export function createMeasurer(themeId: string, fontScale: number): Measurer {
         advance.push(0);
         height.push(0);
       }
-      return { advance, height };
+      return { advance, height, total };
     },
     dispose() {
       host.remove();
     },
   };
+}
+
+/**
+ * 给块里的每个 <img> 补上 width/height 属性，让它在插进量尺卡片的瞬间就有确定高度。
+ *
+ * 不这么做的话：measure() 是同步的，插入 <img> 后立刻读高度，而图片解码是异步的，
+ * 没有尺寸属性的图这时布局高度是 0——分页会以为它不占地方，把它塞进快满的一页，
+ * 等真正渲染时图片撑开，就从卡片底部溢出去了，而且因为测出来是 0，
+ * overflowPages 还检查不出来，连警告都不会报。
+ *
+ * 只补属性、不写死样式：浏览器用 width/height 算出宽高比来预留空间，
+ * 最终显示尺寸仍然由 card.css 里的 width/max-height/object-fit 说了算。
+ */
+export async function annotateImageSizes(blocks: Block[]): Promise<void> {
+  const cache = new Map<string, Promise<{ w: number; h: number } | null>>();
+  const probe = (src: string) => {
+    let hit = cache.get(src);
+    if (!hit) {
+      hit = new Promise<{ w: number; h: number } | null>((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = () => resolve(null); // 坏图不阻塞排版，退回原样
+        img.src = src;
+      });
+      cache.set(src, hit);
+    }
+    return hit;
+  };
+
+  await Promise.all(
+    blocks.map(async (block) => {
+      if (!block.html.includes('<img')) return;
+      const doc = new DOMParser().parseFromString(`<body>${block.html}</body>`, 'text/html');
+      const imgs = Array.from(doc.querySelectorAll('img'));
+      // 已经自带尺寸的就不动，作者写的优先
+      const todo = imgs.filter((img) => img.getAttribute('src') && !(img.hasAttribute('width') && img.hasAttribute('height')));
+      if (!todo.length) return;
+      const sizes = await Promise.all(todo.map((img) => probe(img.getAttribute('src')!)));
+      let changed = false;
+      todo.forEach((img, i) => {
+        const size = sizes[i];
+        if (!size || !size.w || !size.h) return;
+        img.setAttribute('width', String(size.w));
+        img.setAttribute('height', String(size.h));
+        changed = true;
+      });
+      if (changed) block.html = doc.body.innerHTML;
+    }),
+  );
 }
 
 /** 等图片解码完成，否则 <img> 会以 0 高参与测量 */
@@ -176,12 +233,21 @@ export function paginate(
   });
   flush();
 
-  /** 一组块排在一起时的总高度 */
-  const pageHeight = (page: Block[]): number => {
-    if (!page.length) return 0;
-    const { advance: a, height: hh } = measurer.measure(page);
-    return a.slice(0, -1).reduce((s, v) => s + v, 0) + (hh[hh.length - 1] ?? 0);
-  };
+  /** 一组块排在一起时正文区的真实总高（含首块上边距） */
+  const pageHeight = (page: Block[]): number => (page.length ? measurer.measure(page).total : 0);
+
+  // 贪心装页时 used 是 advance 累加出来的，同样漏掉了首块的上边距，
+  // 于是偶尔会把一页塞超一点点（十几像素，肉眼上就是最后一行被裁掉半截）。
+  // 这里按真实总高复核一遍，超了就把末尾的块顺延到下一页。
+  // 只有一个块的页不动——单块超高是 splitBlock 的职责，挪走也没用（比如图片根本切不开）。
+  for (let i = 0; i < pages.length; i++) {
+    let guard = pages[i].length;
+    while (pages[i].length > 1 && pageHeight(pages[i]) > limit && guard-- > 0) {
+      const moved = pages[i].pop()!;
+      if (i + 1 >= pages.length) pages.push([]);
+      pages[i + 1].unshift(moved);
+    }
+  }
 
   // 标题孤行：标题落在页尾、正文却在下一页，读起来很割裂，把标题挪过去。
   // 但下一页要装得下才挪，否则等于把溢出转移了一页。

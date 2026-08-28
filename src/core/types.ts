@@ -91,9 +91,20 @@ export interface RenderOptions {
    * 排版上更整齐，代价是前一页会空出一块。关掉就优先塞满每一页。
    */
   keepHeadingWithBody: boolean;
+  /**
+   * 图片高度上限，单位是卡片坐标系里的像素（卡片固定 1080×1440）。
+   * 竖图撑满 912 宽之后往往比一整页还高，必须封顶才装得下——
+   * 图片是原子块切不开，超了整页就会溢出。
+   * 故意不跟着 fontScale 缩放：这是用户显式设的尺寸，跟着字号变会很难预期。
+   */
+  imageMaxHeight: number;
   /** 预览和导出共用的水印策略 */
   watermark: WatermarkOptions;
 }
+
+/** 内容区大约 1220 高，留一点给标题和正文，所以上限不给到满 */
+export const IMAGE_H_MIN = 240;
+export const IMAGE_H_MAX = 1180;
 
 export type WatermarkPlatform = 'global' | 'xiaohongshu' | 'wechat' | 'moments';
 export type WatermarkKind = 'text' | 'logo';
@@ -187,15 +198,21 @@ export const DEFAULT_RENDER_OPTIONS: RenderOptions = {
   fontScale: 1,
   showAuthor: true,
   keepHeadingWithBody: true,
+  imageMaxHeight: 900,
   watermark: DEFAULT_WATERMARK_OPTIONS,
 };
 
 /** 兼容旧版本存储的浅层配置，并补齐后来新增的水印字段。 */
 export function normalizeRenderOptions(input?: Partial<RenderOptions>): RenderOptions {
   const incomingWatermark = input?.watermark;
+  const rawHeight = Number(input?.imageMaxHeight);
   return {
     ...DEFAULT_RENDER_OPTIONS,
     ...input,
+    // 旧存档没有这个字段，或者存进来是 NaN，都退回默认值再夹到合法区间
+    imageMaxHeight: Number.isFinite(rawHeight)
+      ? Math.min(IMAGE_H_MAX, Math.max(IMAGE_H_MIN, Math.round(rawHeight)))
+      : DEFAULT_RENDER_OPTIONS.imageMaxHeight,
     watermark: {
       ...DEFAULT_WATERMARK_OPTIONS,
       ...incomingWatermark,

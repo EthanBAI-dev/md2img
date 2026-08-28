@@ -241,4 +241,51 @@ function parseBlocksInner(markdown: string): Block[] {
   return blocks;
 }
 
+export interface MaskedImages {
+  /** 图片地址被换成短占位符之后的文本，可以安全发给模型 */
+  masked: string;
+  /** 把模型返回的文本里的占位符换回真实地址 */
+  restore(text: string): string;
+}
+
+/** 超过这个长度的图片地址才值得替换；短的相对路径留着还能给模型一点上下文 */
+const LONG_SRC = 120;
+const TOKEN = /pm-img-\d+/g;
+
+/**
+ * 发给 AI 之前，把图片地址换成 `pm-img-1` 这样的短占位符。
+ *
+ * 图片内联成 data URL 之后，一张 SVG 就是几万字符的 base64。实测一篇带图笔记，
+ * 「AI 排版」「AI 去味」发出去的前 6000 字里 97% 是 base64——模型几乎看不到正文，
+ * 改写质量直接崩掉，token 也全浪费在无意义的字符上。
+ *
+ * 只动地址、不动 alt 和图片在文中的位置，模型照常能看到「这里有张图」。
+ */
+export function maskImageSources(markdown: string): MaskedImages {
+  const store = new Map<string, string>();
+  let seq = 0;
+  const swap = (src: string): string => {
+    if (src.length <= LONG_SRC) return src;
+    seq += 1;
+    const key = `pm-img-${seq}`;
+    store.set(key, src);
+    return key;
+  };
+
+  let masked = markdown.replace(
+    /(<img\b[^>]*?\bsrc=)(["'])(.*?)\2/gi,
+    (_m, head: string, q: string, src: string) => `${head}${q}${swap(src)}${q}`,
+  );
+  masked = masked.replace(
+    /(!\[[^\]]*\]\()([^)\s]+)(\))/g,
+    (_m, head: string, src: string, tail: string) => `${head}${swap(src)}${tail}`,
+  );
+
+  return {
+    masked,
+    // 模型漏掉某个占位符时就地留着原样，总比把整张图丢了强
+    restore: (text) => text.replace(TOKEN, (key) => store.get(key) ?? key),
+  };
+}
+
 export { md };

@@ -232,8 +232,20 @@
   display: block;
   max-width: 100%;
   height: auto;
+  /* 图片是原子块，切不开——太高的图会让整页溢出（splitBlock 对 image 没有分支，
+     只能原样返回，那一页就进 overflowPages）。这里封顶让它一定装得下，
+     余下的高度留给标题和正文。contain 保证等比缩放不变形。
+     用的是卡片坐标系里的绝对像素，不跟 --pm-u 缩放：这是用户在界面上显式设的高度。 */
+  max-height: var(--pm-img-max-h, 900px);
+  object-fit: contain;
   border-radius: 16px;
   margin: 0 auto calc(30 * var(--pm-u));
+}
+
+/* SVG 是矢量，放大无损，撑满内容宽度更好看；
+   位图保持原始尺寸（只做上限约束），避免小图被拉糊 */
+.pm-body img[src^='data:image/svg+xml'] {
+  width: 100%;
 }
 
 /* 公式 */

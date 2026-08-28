@@ -33,7 +33,7 @@ export function renderCardHTML(card: Card, opts: RenderOptions, total: number): 
   const attrs =
     `class="pm-card pm-${card.kind}" data-theme="${esc(opts.themeId)}" ` +
     `data-index="${card.index}" data-card="${card.index}" ` +
-    `style="--pm-font-scale:${opts.fontScale}"`;
+    `style="--pm-font-scale:${opts.fontScale};--pm-img-max-h:${opts.imageMaxHeight}px"`;
 
   const author = opts.showAuthor && 'author' in card && card.author ? `@${esc(card.author)}` : '';
   const watermark = renderWatermark(opts);

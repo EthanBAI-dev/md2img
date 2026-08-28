@@ -1,6 +1,6 @@
 import { parseBlocks, parseNote } from './markdown';
 import type { MathError } from './math';
-import { createMeasurer, paginate, waitForAssets } from './paginate';
+import { annotateImageSizes, createMeasurer, paginate, waitForAssets } from './paginate';
 import { coverTitleSize, getTheme } from './themes';
 import {
   MAX_CARDS,
@@ -42,7 +42,9 @@ export async function buildCards(
   const warnings: string[] = [];
 
   await waitForAssets();
-  const measurer = createMeasurer(themeId, options.fontScale);
+  // 必须在建量尺之前：把图片的真实宽高写进 html，否则同步测量会把未解码的图算成 0 高
+  await annotateImageSizes(blocks);
+  const measurer = createMeasurer(themeId, options.fontScale, options.imageMaxHeight);
   let pages: ReturnType<typeof paginate>;
   try {
     // 封面占 1 张；启用推广页时再给它预留 1 张，保证总数仍符合平台上限。

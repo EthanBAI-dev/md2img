@@ -371,6 +371,29 @@ input:focus,
   text-align: right;
 }
 
+/* 文件夹导入后的笔记切换 */
+.folder-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.folder-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.folder-select {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font-size: 12px;
+}
+
 /* AI 文风档位：分段控件样式，三档等宽，侧边栏窄也能一行放下 */
 .tone-row {
   display: flex;
