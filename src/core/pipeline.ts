@@ -1,5 +1,6 @@
 import { parseBlocks, parseNote } from './markdown';
 import type { MathError } from './math';
+import { inlineImages, type ImageContext } from './images';
 import { annotateImageSizes, createMeasurer, paginate, waitForAssets } from './paginate';
 import { coverTitleSize, getTheme } from './themes';
 import {
@@ -28,6 +29,8 @@ export async function buildCards(
   options: RenderOptions,
   defaultAuthor?: string,
   adInput?: Partial<AdOptions>,
+  /** 相对图片路径 → data URL。笔记正文里只存短路径，渲染时才换成图片本体 */
+  imageCtx?: ImageContext,
 ): Promise<BuildResult> {
   const note = parseNote(markdown);
   // frontmatter 没写 author 就用设置里存的默认署名兜底，不用每篇笔记都手写一遍
@@ -37,7 +40,9 @@ export async function buildCards(
   const themeId = options.themeId;
 
   // mathErrors 单独交给 MathErrorPanel 处理（带「AI 修复」操作），不进 warnings 免得重复提示
-  const { blocks, mathErrors } = parseBlocks(note.body);
+  // 图片在这一步才换成 data URL：正文里始终是短路径，编辑框、存储和 AI 都不必背着 base64
+  const body = imageCtx ? inlineImages(note.body, imageCtx).markdown : note.body;
+  const { blocks, mathErrors } = parseBlocks(body);
   const ad = normalizeAdOptions(adInput);
   const warnings: string[] = [];
 

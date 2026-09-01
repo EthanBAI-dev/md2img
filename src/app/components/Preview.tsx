@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { renderCardHTML } from '../../core/card';
 import { CARD_H, CARD_W, type Card, type RenderOptions } from '../../core/types';
 
@@ -27,31 +27,63 @@ interface Props {
 export function Preview({ cards, options, variant }: Props) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const nodeRef = useRef<HTMLDivElement | null>(null);
-  const [scale, setScale] = useState(variant === 'panel' ? 0.16 : SCALE_MAX);
+  // 自动缩放（跟着容器算）和手动缩放分开存：一旦用户点过 +/-，就以他的选择为准，
+  // 容器再变化也不去覆盖他，除非他点「适应」回到自动
+  const [autoScale, setAutoScale] = useState(variant === 'panel' ? 0.16 : SCALE_MAX);
+  const [userScale, setUserScale] = useState<number | null>(null);
+  const scale = userScale ?? autoScale;
+  const setScale = (next: number | ((cur: number) => number)) =>
+    setUserScale((cur) => {
+      const base = cur ?? autoScale;
+      const value = typeof next === 'function' ? next(base) : next;
+      return Math.min(SCALE_MAX, Math.max(SCALE_MIN, value));
+    });
   const [nav, setNav] = useState({ atStart: true, atEnd: true });
 
-  // useLayoutEffect：在浏览器绘制前量好容器宽度算出合适缩放，避免先闪一下默认值再跳变。
-  // 只有侧边栏用这套「按容器宽度自适应」——网页版屏幕够宽，直接常驻最大缩放就够用，
-  // 犯不着还去随窗口宽度动态收缩，横向滚动本来就能看到更多张
-  useLayoutEffect(() => {
-    if (variant !== 'panel') return;
-    const el = sectionRef.current;
-    if (!el) return;
-    // 只在「宽度」真的变了才重新算缩放。ResizeObserver 盯着整个 section，
-    // 而 +/- 按钮改 scale 会连带改高度（track 高度跟着 scale 走）——
-    // 如果不做这个判断，每次点 +/- 触发的高度变化都会被这里立刻用宽度重新算回原值，按钮等于失效。
-    let lastWidth = -1;
-    const apply = (width: number) => {
-      if (width <= 0 || Math.abs(width - lastWidth) < 0.5) return;
-      lastWidth = width;
-      const fit = width / (CARD_W * CARDS_VISIBLE);
-      setScale(Math.min(SCALE_MAX, Math.max(SCALE_MIN, fit)));
-    };
-    apply(el.clientWidth);
-    const ro = new ResizeObserver((entries) => apply(entries[0].contentRect.width));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [variant]);
+  // 按可视区实际大小算出「刚好装得下」的缩放。
+  //
+  // 高度这一维是必须算的：卡片是 3:4 的竖版，track 高度 = CARD_H * scale + 40，
+  // 之前只按宽度算，遇到矮而宽的容器就会算出一个高度放不下的值，
+  // 胶片带直接顶出面板、盖住下面的样式/水印标签页。
+  //
+  // 观察的是 viewport 而不是整个 section：viewport 的高度由 flex 布局定死、
+  // 且内部 overflow 自己滚，track 变高不会反过来改 viewport 高度，
+  // 所以不会出现「改 scale → 容器变高 → 重算 scale」的自激循环。
+  // 用回调 ref：空态和有卡片态是两棵不同的子树，viewport 会随内容有无挂载/卸载，
+  // 写成 useEffect 只会在首次挂载时跑一次，等卡片出现时就错过了绑定
+  const viewportRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      if (!el) return;
+      // 上一次真正采用的缩放值，用来挡住「每次只差万分之几」的碎步更新。
+      // 这类微小更新自己不会停，会连成一段肉眼可见的缓慢缩小动画
+      let lastApplied = -1;
+      const apply = (width: number, height: number) => {
+        if (width <= 0 || height <= 0) return;
+        const byWidth = width / (CARD_W * (variant === 'panel' ? CARDS_VISIBLE : 1.05));
+        // 只有网页版三栏才按高度收缩。
+        //
+        // 侧边栏里预览面板是 flex:none、高度由内容撑开，viewport 的高度就等于
+        // 胶片带的高度——一旦按高度算缩放就成了闭环：
+        // 缩放变小 → 胶片带变矮 → viewport 变矮 → 算出更小的缩放 → …
+        // 实测会从 0.15 一路碎步缩到下限 0.10，持续两秒多，看着就像一段动画。
+        // 三栏布局里 viewport 高度由列高和兄弟节点决定，与胶片带无关，才没有这个问题。
+        const byHeight = variant === 'web' ? (height - GAP * 2 - 26) / CARD_H : Infinity;
+        const next = Math.min(SCALE_MAX, Math.max(SCALE_MIN, Math.min(byWidth, byHeight)));
+        // 差得太小就不动：既挡住碎步循环，也避免无意义的重渲染
+        if (Math.abs(next - lastApplied) < 0.004) return;
+        lastApplied = next;
+        setAutoScale(next);
+      };
+      apply(el.clientWidth, el.clientHeight);
+      const ro = new ResizeObserver((entries) => {
+        const box = entries[0].contentRect;
+        apply(box.width, box.height);
+      });
+      ro.observe(el);
+      return () => ro.disconnect();
+    },
+    [variant],
+  );
 
   // track 只有横向可滚（overflow-x），纵向滚轮天然没有内容可滚、会原样冒泡给页面，
   // 所以这里故意不拦截滚轮事件——之前拦截纵向滚轮转横向滚动，会导致页面滑到预览区时卡住不动。
@@ -87,6 +119,8 @@ export function Preview({ cards, options, variant }: Props) {
 
   const isMaxed = scale > SCALE_MID;
   const toggleMinMax = () => setScale(isMaxed ? SCALE_MIN : SCALE_MAX);
+  /** 回到「按容器自动算」的状态，手动缩放作废 */
+  const fitToBox = () => setUserScale(null);
 
   return (
     <section className="panel panel--preview" ref={sectionRef}>
@@ -121,6 +155,17 @@ export function Preview({ cards, options, variant }: Props) {
           >
             {isMaxed ? '⤡' : '⤢'}
           </button>
+          {userScale !== null && (
+            <button
+              type="button"
+              className="btn btn--ghost btn--xs"
+              aria-label="恢复自动适应"
+              title="恢复自动适应窗口大小"
+              onClick={fitToBox}
+            >
+              ⤾
+            </button>
+          )}
         </div>
       </header>
 
@@ -130,7 +175,7 @@ export function Preview({ cards, options, variant }: Props) {
           <span>支持 $公式$、代码块、表格、列表</span>
         </div>
       ) : (
-        <div className="preview-viewport">
+        <div className="preview-viewport" ref={viewportRef}>
           <div ref={trackRef} className="preview-track" style={{ height: CARD_H * scale + 40 }}>
             {cards.map((card) => (
               <figure

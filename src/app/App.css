@@ -106,9 +106,35 @@ body {
   padding: 14px;
   overflow: hidden;
 }
-/* 全屏编辑（网页版）三栏：编辑器 | 样式+预览 | 文案，大体均分，编辑器是主要工作区多给一点 */
+/* 三栏之间靠分隔条分隔，不需要再叠一层大间距，缝隙收到 4px */
 .layout--3col {
-  grid-template-columns: minmax(360px, 1.15fr) minmax(360px, 1fr) minmax(340px, 0.9fr);
+  gap: 4px;
+  padding: 10px 12px 12px;
+}
+/* 默认三栏等宽。--c1/--c2/--c3 由拖拽分隔条实时改写；
+   走 CSS 变量而不是直接内联 grid-template-columns，是为了让下面的窄屏
+   媒体查询仍然能覆盖布局——内联样式的优先级比媒体查询高，直接内联会把响应式压死 */
+.layout--3col {
+  grid-template-columns:
+    minmax(260px, var(--c1, 1fr)) var(--split-w)
+    minmax(260px, var(--c2, 1fr)) var(--split-w)
+    minmax(260px, var(--c3, 1fr));
+  --split-w: 6px;
+}
+/* 分隔条：平时几乎隐形，鼠标移上去才显出来 */
+.col-splitter {
+  align-self: stretch;
+  border: 0;
+  padding: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: col-resize;
+  transition: background 0.12s;
+  touch-action: none;
+}
+.col-splitter:hover,
+.col-splitter.is-dragging {
+  background: var(--ui-accent);
 }
 @media (max-width: 1160px) {
   /* 窗口不够宽就退回两栏：文案挤到编辑器下面，不然每栏都会窄得没法用 */
@@ -117,6 +143,10 @@ body {
   }
   .layout--3col .col--copy {
     grid-column: 1;
+  }
+  /* 两栏布局下分隔条没有意义，收掉（display:none 会把它移出 grid 流） */
+  .col-splitter {
+    display: none;
   }
 }
 /* 侧边栏是单栏纵向流：笔记内容、样式、预览、文案都在同一个可滚动列里，
@@ -139,6 +169,181 @@ body {
   gap: 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* 三栏版每一列都严格锁在一屏高度内：列本身不滚，需要滚的是列里
+   那个可滚区域（编辑框、标签页内容、预览胶片带）。
+   否则加一个功能整列就长一截，最后整页跟着上下滚，很难用 */
+.layout--3col .col {
+  overflow: hidden;
+}
+/* 左栏：编辑器吃满整列高度 */
+.layout--3col .col--edit > .panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.layout--3col .col--edit .editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+}
+/* 中栏：预览在上占满剩余空间，样式/水印标签页在下按内容高度 */
+.layout--3col .col--preview > .panel--preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.layout--3col .col--preview > .panel--preview .preview-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* 高度由 --panel-h 决定，横向分隔条上下拖动改写它 */
+.layout--3col .col--preview > .tabbed {
+  flex: none;
+  height: var(--panel-h, 42%);
+}
+/* 横向分隔条：和竖向那两条同一套观感，只是方向不同 */
+.row-splitter {
+  flex: none;
+  height: 6px;
+  margin: -3px 0;
+  border: 0;
+  padding: 0;
+  border-radius: 3px;
+  background: transparent;
+  cursor: row-resize;
+  transition: background 0.12s;
+  touch-action: none;
+}
+.row-splitter:hover,
+.row-splitter.is-dragging {
+  background: var(--ui-accent);
+}
+
+/* ---------- 标签页面板 ----------
+   把若干功能面板收进一个窗口，一次只显示一个。
+   以前每加一个功能就往列底追加一块，整列越来越长、被迫上下滚动，
+   水印这类平时用不到的还常年占着一大片空白 */
+.tabbed {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+/* 撑满所在列的剩余高度，内容多了在内部滚，不把整列顶长 */
+.tabbed--fill {
+  flex: 1 1 auto;
+}
+.tabbed-bar {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  padding: 6px 6px 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.tabbed-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--ui-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tabbed-tab:hover {
+  color: var(--ui-fg);
+}
+.tabbed-tab.is-active {
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+  font-weight: 600;
+}
+/* 标签上的小圆点：这一项当前是开着的，不用点进去看 */
+.tabbed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ui-accent);
+}
+.tabbed-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+}
+/* 标签页里的空间本来就紧，各种行距收一档，别让内容看着松垮 */
+.tabbed-body .control-row {
+  margin-top: 8px;
+  gap: 8px;
+}
+.tabbed-body .control-row--checks {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tabbed-body .theme-grid {
+  gap: 6px;
+}
+.tabbed-body .theme-swatch {
+  height: 30px;
+}
+.tabbed-body .theme-name {
+  font-size: 11.5px;
+}
+.tabbed-body .field + .field,
+.tabbed-body .hint {
+  margin-top: 8px;
+}
+/* 标签里的面板去掉自己的外框，免得框中框；标题也去掉，标签本身就是标题 */
+.tabbed-body > .panel {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.tabbed-body > .panel > .panel-head {
+  justify-content: flex-end;
+}
+.tabbed-body > .panel > .panel-head > h3 {
+  display: none;
+}
+/* 标题没了就只剩右侧那个开关/计数，头部留白也可以收掉 */
+.tabbed-body > .panel > .panel-head:empty {
+  display: none;
+}
+
+/* 设置里的用量统计 */
+.usage-box {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-bg);
+}
+.usage-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ui-muted);
+}
+.usage-row strong {
+  color: var(--ui-fg);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.usage-row--saved strong {
+  color: #2ea043;
+}
+.usage-box .hint {
+  margin-top: 8px;
 }
 
 /* ---------- 面板 ---------- */
@@ -221,21 +426,33 @@ input:focus,
 }
 
 /* ---------- 编辑器工具栏：参考 Madopic 的图标条，按功能分组，组间留个小间隔 ---------- */
+/* 工具栏永远单行，放不下就横向滚。
+   之前是 flex-wrap: wrap，换行的最小单位是「组」，
+   于是列一窄「分页」这组就整组掉到第二行、孤零零占一整行，很难看。
+   宽度余量本来就只有二十几像素，稍微拖窄一点就会触发 */
 .md-toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   margin-bottom: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--ui-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.md-toolbar::-webkit-scrollbar {
+  display: none;
+}
+.md-toolbar-group {
+  flex: none;
 }
 .md-toolbar-group {
   display: flex;
   gap: 2px;
 }
 .md-toolbar-group + .md-toolbar-group {
-  padding-left: 8px;
+  padding-left: 6px;
   border-left: 1px solid var(--ui-border);
 }
 .md-toolbar-btn {
@@ -390,7 +607,7 @@ input:focus,
   border: 1px solid var(--ui-border);
   border-radius: 8px;
   background: var(--ui-bg);
-  color: var(--ui-text);
+  color: var(--ui-fg);
   font-size: 12px;
 }
 
@@ -430,7 +647,7 @@ input:focus,
   cursor: pointer;
 }
 .tone-btn:hover {
-  color: var(--ui-text);
+  color: var(--ui-fg);
 }
 .tone-btn.is-active {
   background: var(--ui-accent);
@@ -551,64 +768,138 @@ input:focus,
   align-items: flex-start;
   gap: 10px;
 }
-.title-options,
 .preset-row {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
-.title-chip {
-  border: 1px solid var(--ui-border);
-  background: transparent;
-  color: var(--ui-fg);
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.title-chip.is-active {
-  border-color: var(--ui-accent);
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent);
-}
-.editable-title-row,
-.tag-entry-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-}
-.editable-title-row input,
-.tag-entry-row input {
-  flex: 1;
-  min-width: 0;
-}
-.tag-list {
+
+/* ---------- 可就地编辑的气泡 ----------
+   标题和标签共用。以前是「气泡列表 + 下面再挂一个输入框和按钮」，
+   同一份数据两套控件，占地方还得在两处之间来回看。
+   现在气泡本身就能改：hover 出铅笔，点铅笔或双击进入编辑 */
+.chip-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  align-items: center;
 }
-.tag {
+.chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  background: var(--ui-bg);
+  max-width: 100%;
   border: 1px solid var(--ui-border);
   border-radius: 999px;
-  padding: 4px 6px 4px 11px;
+  background: var(--ui-bg);
   font-size: 12px;
-  color: var(--ui-blue);
+  line-height: 1.4;
 }
-.tag button {
+.chip.is-active {
+  border-color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+}
+.chip.is-active .chip-text {
+  color: var(--ui-accent);
+}
+.chip-text {
+  border: 0;
+  background: transparent;
+  color: var(--ui-fg);
+  font: inherit;
+  cursor: pointer;
+  padding: 5px 4px 5px 11px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.chip-placeholder {
+  color: var(--ui-muted);
+}
+.chip-edit,
+.chip-remove {
+  display: flex;
+  align-items: center;
   border: 0;
   background: transparent;
   color: var(--ui-muted);
   cursor: pointer;
-  font-size: 13px;
+  padding: 0 4px;
   line-height: 1;
-  padding: 0 3px;
+  /* 平时不显示，鼠标移到气泡上才出来：静止时列表更干净 */
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.chip-remove {
+  font-size: 14px;
+  padding-right: 8px;
+}
+.chip:hover .chip-edit,
+.chip:hover .chip-remove,
+.chip-edit:focus-visible,
+.chip-remove:focus-visible {
+  opacity: 1;
+}
+/* 铅笔用绿色：和右边的删除 × 区分开，一眼知道哪个是改、哪个是删 */
+.chip-edit {
+  color: #2ea043;
+}
+.chip-edit:hover {
+  color: #3fb950;
+}
+.chip-remove:hover {
+  color: var(--ui-accent);
+}
+
+/* 编辑态：输入框宽度跟着内容走。
+   用「隐藏的伪元素撑开 grid、输入框铺满同一格」这个纯 CSS 自适应写法，
+   比用 ch/em 估算靠谱——中英文混排时字符宽度差很多，估不准 */
+.chip--editing {
+  display: inline-grid;
+  align-items: center;
+  border-color: var(--ui-accent);
+  padding: 0 10px;
+  min-width: 90px;
+  max-width: 100%;
+}
+.chip--editing::after {
+  content: attr(data-value) ' ';
+  visibility: hidden;
+  white-space: pre;
+  grid-area: 1 / 1;
+  font: inherit;
+  padding: 5px 0;
+}
+.chip--editing input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  font: inherit;
+  color: var(--ui-fg);
+  border-radius: 0;
+}
+.chip--editing input:focus {
+  outline: none;
+}
+.chip--add {
+  border-style: dashed;
+  color: var(--ui-muted);
+  cursor: pointer;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 12px;
+}
+.chip--add:hover:not(:disabled) {
+  border-color: var(--ui-accent);
+  color: var(--ui-accent);
+}
+.chip--add:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ---------- 预览：横向胶片带，高度只随缩放变化，不随卡片数量变化 ---------- */
@@ -631,6 +922,10 @@ input:focus,
 }
 .preview-viewport {
   position: relative;
+  /* 必须能裁剪：胶片带高度由缩放决定，缩放大到装不下时
+     以前会直接顶出面板、盖住下面的样式/水印标签页 */
+  min-height: 0;
+  overflow: hidden;
 }
 .preview-track {
   display: flex;

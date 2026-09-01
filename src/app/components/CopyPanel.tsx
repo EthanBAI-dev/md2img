@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { formatTags, type XhsCopy } from '../../core/ai';
+import { AddChip, EditableChip } from './EditableChip';
 
 interface Props {
   copy: XhsCopy | null;
@@ -28,16 +29,7 @@ function CopyButton({ text, label = '复制' }: { text: string; label?: string }
 }
 
 export function CopyPanel({ copy, loading, error, onGenerate, onCreateManual, onChange }: Props) {
-  const [tagDraft, setTagDraft] = useState('');
   const picked = copy ? Math.min(copy.selectedTitle ?? 0, Math.max(0, copy.titles.length - 1)) : 0;
-
-  const addTag = () => {
-    if (!copy) return;
-    const tag = tagDraft.replace(/^#+/, '').trim();
-    if (!tag || copy.tags.includes(tag) || copy.tags.length >= 10) return;
-    onChange({ ...copy, tags: [...copy.tags, tag] });
-    setTagDraft('');
-  };
 
   return (
     <section className="panel">
@@ -63,52 +55,43 @@ export function CopyPanel({ copy, loading, error, onGenerate, onCreateManual, on
             <label>
               标题 <span className="counter">{(copy.titles[picked] ?? '').length}/20</span>
             </label>
-            <div className="title-options">
+            <div className="chip-list">
               {copy.titles.map((title, index) => (
-                <button
+                <EditableChip
                   key={index}
-                  type="button"
-                  className={`title-chip${index === picked ? ' is-active' : ''}`}
-                  onClick={() => onChange({ ...copy, selectedTitle: index })}
-                >
-                  {title || `标题 ${index + 1}`}
-                </button>
+                  value={title}
+                  placeholder={`标题 ${index + 1}`}
+                  maxLength={20}
+                  active={index === picked}
+                  onSelect={() => onChange({ ...copy, selectedTitle: index })}
+                  onChange={(next) => {
+                    const titles = [...copy.titles];
+                    titles[index] = next;
+                    onChange({ ...copy, titles, selectedTitle: index });
+                  }}
+                  onRemove={
+                    copy.titles.length > 1
+                      ? () =>
+                          onChange({
+                            ...copy,
+                            titles: copy.titles.filter((_, i) => i !== index),
+                            selectedTitle: Math.max(0, picked - (index <= picked ? 1 : 0)),
+                          })
+                      : undefined
+                  }
+                />
               ))}
               {copy.titles.length < 5 && (
-                <button
-                  type="button"
-                  className="title-chip"
-                  onClick={() => onChange({ ...copy, titles: [...copy.titles, ''], selectedTitle: copy.titles.length })}
-                >
-                  ＋ 添加标题
-                </button>
+                <AddChip
+                  label="标题"
+                  placeholder="输入小红书标题"
+                  maxLength={20}
+                  onAdd={(v) => onChange({ ...copy, titles: [...copy.titles, v], selectedTitle: copy.titles.length })}
+                />
               )}
             </div>
-            <div className="editable-title-row">
-              <input
-                aria-label="编辑当前标题"
-                value={copy.titles[picked] ?? ''}
-                maxLength={20}
-                placeholder="输入小红书标题"
-                onChange={(e) => {
-                  const titles = [...copy.titles];
-                  titles[picked] = e.target.value;
-                  onChange({ ...copy, titles });
-                }}
-              />
-              {copy.titles.length > 1 && (
-                <button
-                  type="button"
-                  className="btn btn--ghost btn--xs"
-                  onClick={() => {
-                    const titles = copy.titles.filter((_, index) => index !== picked);
-                    onChange({ ...copy, titles, selectedTitle: Math.max(0, picked - 1) });
-                  }}
-                >
-                  删除
-                </button>
-              )}
-              <CopyButton text={copy.titles[picked] ?? ''} label="复制" />
+            <div className="field-actions">
+              <CopyButton text={copy.titles[picked] ?? ''} label="复制选中标题" />
             </div>
           </div>
 
@@ -131,34 +114,36 @@ export function CopyPanel({ copy, loading, error, onGenerate, onCreateManual, on
             <label>
               标签 <span className="counter">{copy.tags.length}/10</span>
             </label>
-            <div className="tag-list">
+            <div className="chip-list">
               {copy.tags.map((tag, index) => (
-                <span key={`${tag}-${index}`} className="tag">
-                  #{tag}
-                  <button
-                    type="button"
-                    aria-label={`删除标签 ${tag}`}
-                    onClick={() => onChange({ ...copy, tags: copy.tags.filter((_, i) => i !== index) })}
-                  >
-                    ×
-                  </button>
-                </span>
+                <EditableChip
+                  key={`${tag}-${index}`}
+                  value={tag}
+                  prefix="#"
+                  placeholder="标签"
+                  maxLength={20}
+                  onChange={(next) => {
+                    const clean = next.replace(/^#+/, '').trim();
+                    const tags = [...copy.tags];
+                    if (!clean) tags.splice(index, 1);
+                    else tags[index] = clean;
+                    onChange({ ...copy, tags });
+                  }}
+                  onRemove={() => onChange({ ...copy, tags: copy.tags.filter((_, i) => i !== index) })}
+                />
               ))}
-            </div>
-            <div className="tag-entry-row">
-              <input
-                value={tagDraft}
-                placeholder="添加标签，回车确认"
-                disabled={copy.tags.length >= 10}
-                onChange={(e) => setTagDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addTag();
-                  }
-                }}
-              />
-              <button type="button" className="btn btn--ghost btn--xs" disabled={!tagDraft.trim() || copy.tags.length >= 10} onClick={addTag}>添加</button>
+              {copy.tags.length < 10 && (
+                <AddChip
+                  label="标签"
+                  placeholder="标签名，回车继续加"
+                  maxLength={20}
+                  onAdd={(v) => {
+                    const clean = v.replace(/^#+/, '').trim();
+                    if (!clean || copy.tags.includes(clean)) return;
+                    onChange({ ...copy, tags: [...copy.tags, clean] });
+                  }}
+                />
+              )}
             </div>
             <div className="field-actions">
               <CopyButton text={formatTags(copy.tags)} label="复制标签" />

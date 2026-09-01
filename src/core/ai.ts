@@ -113,9 +113,49 @@ function asStringArray(v: unknown): string[] {
   return v.map((x) => String(x).trim()).filter(Boolean);
 }
 
-async function chat(system: string, user: string, config: AiConfig, signal?: AbortSignal): Promise<string> {
+/**
+ * 一次会话内的结果缓存：同样的 system + user + 模型，直接返回上次的结果，不再发请求。
+ *
+ * 挡的是最常见的一种浪费——手滑双击、或者「生成完看了看又点一次」。
+ * 内容只要改动一个字缓存就自然失效，所以不会拿到过期结果。
+ * 只存在内存里，刷新页面就没了：这是防手滑的，不是持久化缓存。
+ */
+const responseCache = new Map<string, string>();
+
+/**
+ * 改写类任务的输出上限：输出和输入基本等长，按中文 ~1.5 字/token 折算再留 1.6 倍余量。
+ * 给足余量是因为卡太紧会把结尾截断，那比多花一点 token 糟糕得多。
+ */
+function rewriteCap(input: string): number {
+  return Math.min(4000, Math.max(600, Math.ceil((input.length / 1.5) * 1.6)));
+}
+/** 缓存条数上限，避免长时间使用后无限增长 */
+const CACHE_MAX = 24;
+
+/** 本次会话累计发出去的字符数，界面上用来提示「花了多少」 */
+export const usage = { chars: 0, calls: 0, saved: 0 };
+
+/**
+ * 输出上限。不设的话模型可能把一个只要三十来字的封面写成一大段——
+ * 输出 token 通常比输入贵，能卡就卡。
+ * 改写类任务的输出和输入等长，所以按输入长度动态给，不能写死。
+ */
+async function chat(
+  system: string,
+  user: string,
+  config: AiConfig,
+  signal?: AbortSignal,
+  maxTokens?: number,
+): Promise<string> {
   if (!config.apiKey) throw new Error('还没填 API Key，点右上角设置');
   if (!config.baseUrl) throw new Error('还没填 API 地址');
+
+  const cacheKey = `${config.model}\u0000${maxTokens ?? 0}\u0000${system}\u0000${user}`;
+  const hit = responseCache.get(cacheKey);
+  if (hit !== undefined) {
+    usage.saved += system.length + user.length;
+    return hit;
+  }
 
   const url = `${config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const res = await fetch(url, {
@@ -128,6 +168,7 @@ async function chat(system: string, user: string, config: AiConfig, signal?: Abo
     body: JSON.stringify({
       model: config.model,
       temperature: 0.7,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -143,6 +184,11 @@ async function chat(system: string, user: string, config: AiConfig, signal?: Abo
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('接口返回内容为空');
+
+  usage.chars += system.length + user.length;
+  usage.calls += 1;
+  if (responseCache.size >= CACHE_MAX) responseCache.delete(responseCache.keys().next().value as string);
+  responseCache.set(cacheKey, content);
   return content;
 }
 
@@ -166,7 +212,8 @@ const FORMAT_SYSTEM_PROMPT = `你是专业的笔记排版编辑，负责把用�
 export async function formatAsMarkdown(rawText: string, config: AiConfig, signal?: AbortSignal): Promise<string> {
   // 排版任务需要看到完整结构，给的余量比文案生成大一些
   const excerpt = rawText.slice(0, 6000);
-  const content = await chat(FORMAT_SYSTEM_PROMPT, excerpt, config, signal);
+  // 排版只是重组结构，输出长度和输入同量级，留 1.5 倍余量够了
+  const content = await chat(FORMAT_SYSTEM_PROMPT, excerpt, config, signal, rewriteCap(excerpt));
   return stripCodeFence(content);
 }
 
@@ -252,7 +299,7 @@ export async function humanizeMarkdown(
   signal?: AbortSignal,
 ): Promise<string> {
   const excerpt = rawText.slice(0, 6000);
-  const content = await chat(`${HUMANIZE_BASE}\n${getTone(tone).article}`, excerpt, config, signal);
+  const content = await chat(`${HUMANIZE_BASE}\n${getTone(tone).article}`, excerpt, config, signal, rewriteCap(excerpt));
   return stripCodeFence(content);
 }
 
@@ -272,9 +319,59 @@ export async function fixFormula(
   signal?: AbortSignal,
 ): Promise<string> {
   const userPrompt = `报错信息：${errorMessage}\n\n原始公式：\n${tex}`;
-  const content = await chat(FIX_FORMULA_SYSTEM_PROMPT, userPrompt, config, signal);
+  // 修好的公式不会比原式长太多，给 400 绰绰有余
+  const content = await chat(FIX_FORMULA_SYSTEM_PROMPT, userPrompt, config, signal, 400);
   // 模型有时还是会手滑带上 $ 定界符或代码块，都给它剥掉
   return stripCodeFence(content).replace(/^\${1,2}|\${1,2}$/g, '').trim();
+}
+
+/**
+ * 封面只需要「这篇在讲什么」，不需要读完全文——所以只发开头这么多字。
+ * 对比：整套文案生成要发 4000 字，改写正文要发 6000 字。
+ */
+const COVER_EXCERPT = 700;
+
+const COVER_SYSTEM_PROMPT = `你是图文卡片的封面文案编辑。用户给你一篇笔记的开头，你负责提炼出封面上的三行字。
+
+规则：
+- 大标题（title）不超过 16 个字，是卡片上的大字报，要精炼、有信息量，不要用「分享」「总结」这类空词
+- 副标题（subtitle）不超过 24 个字，一句话说清这篇讲什么
+- 分类标签（badge）不超过 6 个字，是一个类目词，例如「机器学习入门」「职场干货」「读书笔记」
+- 只依据用户给的内容提炼，不要编造原文里没有的结论
+- 只输出 JSON，不要任何解释文字，格式：{"title": "...", "subtitle": "...", "badge": "..."}`;
+
+/**
+ * 只生成封面三行字。
+ *
+ * 和 generateCopy 分开是有意的：generateCopy 顺带也会产出封面，但它要发 4000 字正文、
+ * 还要写标题/正文/标签一整套，输出也长。只想换个封面的时候用它太亏，
+ * 这个接口只发开头 700 字、只要三个短字段，成本大约是前者的六分之一。
+ */
+export async function generateCover(
+  note: Note,
+  plainText: string,
+  config: AiConfig,
+  signal?: AbortSignal,
+): Promise<CoverMeta> {
+  const hasRealTitle = note.title && note.title !== '未命名笔记';
+  const userPrompt = [
+    hasRealTitle ? `笔记标题：${note.title}` : '（这篇笔记还没有标题，请你根据正文自己提炼）',
+    note.tags.length ? `作者的标签：${note.tags.join('、')}` : '',
+    '',
+    '笔记开头：',
+    plainText.slice(0, COVER_EXCERPT),
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  // 封面就三个短字段，200 足够
+  const content = await chat(COVER_SYSTEM_PROMPT, userPrompt, config, signal, 200);
+  const parsed = extractJson(content) as Record<string, unknown>;
+  return {
+    title: String(parsed.title ?? '').trim().slice(0, 16) || note.title.slice(0, 16),
+    subtitle: String(parsed.subtitle ?? '').trim().slice(0, 24),
+    badge: String(parsed.badge ?? '').trim().slice(0, 6),
+  };
 }
 
 export async function generateCopy(
@@ -302,7 +399,8 @@ export async function generateCopy(
 
   // 文风档位和「AI 去味」共用一个选择，图上的文章和配套文案才是同一个腔调
   const system = tone ? `${SYSTEM_PROMPT}\n\n额外的文风要求（优先级高于上面的"语气自然口语化"）：\n${getTone(tone).copy}` : SYSTEM_PROMPT;
-  const content = await chat(system, userPrompt, config, signal);
+  // 标题 + 1000 字正文 + 10 个标签 + 封面，中文按 ~1.5 字/token 折算再留余量
+  const content = await chat(system, userPrompt, config, signal, 1400);
   const parsed = extractJson(content) as Record<string, unknown>;
   const titles = asStringArray(parsed.titles).map((t) => t.slice(0, 20));
   const tags = asStringArray(parsed.tags)

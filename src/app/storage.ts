@@ -82,6 +82,12 @@ export const KEYS = {
   defaultAuthor: 'pm.defaultAuthor',
   /** 「去 AI 味」的文风档位，正文改写和小红书文案共用 */
   tone: 'pm.tone',
+  /** 相对图片路径 → data URL。笔记正文只存短路径，图片本体单独放这里 */
+  images: 'pm.images',
+  /** 全屏编辑三栏各自的宽度占比 */
+  columns: 'pm.columns',
+  /** 中栏里「设置面板」占列高的比例 */
+  panelRatio: 'pm.panelRatio',
   /** 待注入创作平台的载荷 */
   payload: 'pm.publishPayload',
 } as const;

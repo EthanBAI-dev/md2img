@@ -1,11 +1,17 @@
 import { useState } from 'react';
-import { AI_PRESETS, type AiConfig } from '../../core/ai';
+import { AI_PRESETS, usage, type AiConfig } from '../../core/ai';
 
 interface Props {
   config: AiConfig;
   defaultAuthor: string;
   onSave: (config: AiConfig, defaultAuthor: string) => void;
   onClose: () => void;
+}
+
+/** 字符数按人话显示，免得盯着一串数字数位数 */
+function formatChars(n: number): string {
+  if (n < 1000) return `${n} 字符`;
+  return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)} 千字符`;
 }
 
 export function SettingsDialog({ config, defaultAuthor, onSave, onClose }: Props) {
@@ -92,6 +98,26 @@ export function SettingsDialog({ config, defaultAuthor, onSave, onClose }: Props
                 </a>
               </>
             )}
+          </p>
+        </div>
+
+        {/* 本次会话的实际消耗。放出来是为了让「省 token」这件事看得见——
+            知道全文改写要发多少字，才会想起先选中一段再点 */}
+        <div className="usage-box">
+          <div className="usage-row">
+            <span>本次会话已发送</span>
+            <strong>{formatChars(usage.chars)}</strong>
+            <span className="counter">{usage.calls} 次请求</span>
+          </div>
+          {usage.saved > 0 && (
+            <div className="usage-row usage-row--saved">
+              <span>重复请求省下</span>
+              <strong>{formatChars(usage.saved)}</strong>
+            </div>
+          )}
+          <p className="hint">
+            省 token 的两个办法：在编辑框里<b>选中一段</b>再点「AI 排版 / AI 去味」，就只发这一段；
+            只想要封面就点「AI 封面」，它只发正文开头，已生成过文案时甚至不发请求。
           </p>
         </div>
 
