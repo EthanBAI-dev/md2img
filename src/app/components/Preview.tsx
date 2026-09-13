@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState } from 'react';
 import { renderCardHTML } from '../../core/card';
 import { CARD_H, CARD_W, type Card, type RenderOptions } from '../../core/types';
+import { Icon } from './Icon';
 
 const GAP = 14;
 const SCALE_MIN = 0.1;
 const SCALE_MAX = 0.3;
 const SCALE_STEP = 0.02;
-const SCALE_MID = (SCALE_MIN + SCALE_MAX) / 2;
 /** 一屏大致露出这么多张卡片：数值越大默认卡片越小。多出来的零头暗示「还能横向滚动」 */
 const CARDS_VISIBLE = 2.1;
 
@@ -117,61 +117,59 @@ export function Preview({ cards, options, variant }: Props) {
     nodeRef.current?.scrollBy({ left: dir * (CARD_W * scale + GAP), behavior: 'smooth' });
   };
 
-  const isMaxed = scale > SCALE_MID;
-  const toggleMinMax = () => setScale(isMaxed ? SCALE_MIN : SCALE_MAX);
   /** 回到「按容器自动算」的状态，手动缩放作废 */
   const fitToBox = () => setUserScale(null);
 
   return (
     <section className="panel panel--preview" ref={sectionRef}>
-      <header className="panel-head">
-        <h3>预览</h3>
-        <div className="preview-controls">
-          <span className="counter">{cards.length} 张</span>
+      <header className="bar">
+        <div className="bar-title">
+          <Icon name="eye" size={13} />
+          <span>卡片预览</span>
+          <span className="badge">{cards.length} 张 · 3:4 竖版</span>
+        </div>
+        <div className="zoom-group">
           <button
             type="button"
-            className="btn btn--ghost btn--xs"
+            className="zoom-btn"
             aria-label="缩小预览"
+            title="缩小"
             disabled={scale <= SCALE_MIN}
             onClick={() => setScale((s) => Math.max(SCALE_MIN, +(s - SCALE_STEP).toFixed(2)))}
           >
-            −
+            <Icon name="minus" size={11} />
           </button>
+          {/* 显示的是相对卡片真实尺寸（1080 宽）的缩放比例 */}
+          <span className="zoom-value" title="相对卡片真实尺寸的缩放比例">
+            {Math.round(scale * 100)}%
+          </span>
           <button
             type="button"
-            className="btn btn--ghost btn--xs"
+            className="zoom-btn"
             aria-label="放大预览"
+            title="放大"
             disabled={scale >= SCALE_MAX}
             onClick={() => setScale((s) => Math.min(SCALE_MAX, +(s + SCALE_STEP).toFixed(2)))}
           >
-            ＋
+            <Icon name="plus" size={11} />
           </button>
+          <span className="zoom-sep" />
           <button
             type="button"
-            className="btn btn--ghost btn--xs"
-            aria-label={isMaxed ? '缩到最小' : '放到最大'}
-            title={isMaxed ? '缩到最小' : '放到最大'}
-            onClick={toggleMinMax}
+            className={`zoom-btn zoom-btn--text${userScale === null ? ' is-active' : ''}`}
+            title="按窗口大小自动适应"
+            onClick={fitToBox}
           >
-            {isMaxed ? '⤡' : '⤢'}
+            <Icon name="expand" size={11} />
+            自适应
           </button>
-          {userScale !== null && (
-            <button
-              type="button"
-              className="btn btn--ghost btn--xs"
-              aria-label="恢复自动适应"
-              title="恢复自动适应窗口大小"
-              onClick={fitToBox}
-            >
-              ⤾
-            </button>
-          )}
         </div>
       </header>
 
       {!cards.length ? (
         <div className="preview-empty">
-          左边贴上 Markdown，右边实时出图
+          <Icon name="image" size={22} />
+          写下 Markdown，这里实时出图
           <span>支持 $公式$、代码块、表格、列表</span>
         </div>
       ) : (
@@ -199,12 +197,12 @@ export function Preview({ cards, options, variant }: Props) {
           {/* 浮在图片上方的翻页按钮，半透明，滚到头的那一侧就不显示了 */}
           {!nav.atStart && (
             <button type="button" className="preview-nav preview-nav--left" aria-label="向左滚动" onClick={() => scrollByStep(-1)}>
-              ‹
+              <Icon name="chevronLeft" size={14} />
             </button>
           )}
           {!nav.atEnd && (
             <button type="button" className="preview-nav preview-nav--right" aria-label="向右滚动" onClick={() => scrollByStep(1)}>
-              ›
+              <Icon name="chevronRight" size={14} />
             </button>
           )}
         </div>

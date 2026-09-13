@@ -78,6 +78,10 @@ export const KEYS = {
   ad: 'pm.adOptions',
   ai: 'pm.aiConfig',
   copy: 'pm.copy',
+  /** 抖音版文案，和小红书那份分开存 */
+  copyDouyin: 'pm.copyDouyin',
+  /** 全屏编辑右侧文案栏是否收起 */
+  copyCollapsed: 'pm.copyCollapsed',
   /** 默认署名，笔记没写 author 时兜底用这个，不用每篇都手写 */
   defaultAuthor: 'pm.defaultAuthor',
   /** 「去 AI 味」的文风档位，正文改写和小红书文案共用 */

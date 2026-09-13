@@ -2,9 +2,9 @@
   "manifest_version": 3,
   "name": "文图 TextPIC · Markdown 转图文卡片",
   "version": "0.1.0",
-  "description": "把 Markdown 笔记自动排版成图文卡片，支持公式和多套模板，可选一键填入小红书创作台。",
+  "description": "把 Markdown 笔记自动排版成图文卡片，支持公式和多套模板，可一键填入小红书、抖音创作台。",
   "permissions": ["storage", "unlimitedStorage", "sidePanel", "tabs"],
-  "host_permissions": ["https://creator.xiaohongshu.com/*"],
+  "host_permissions": ["https://creator.xiaohongshu.com/*", "https://creator.douyin.com/*"],
   "optional_host_permissions": ["https://*/*"],
   "background": {
     "service_worker": "background.js",
@@ -20,6 +20,11 @@
     {
       "matches": ["https://creator.xiaohongshu.com/*"],
       "js": ["content-xhs.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://creator.douyin.com/*"],
+      "js": ["content-douyin.js"],
       "run_at": "document_idle"
     }
   ],

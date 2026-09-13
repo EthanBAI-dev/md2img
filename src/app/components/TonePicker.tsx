@@ -1,4 +1,5 @@
 import { TONES, type ToneId } from '../../core/ai';
+import { Icon } from './Icon';
 
 interface Props {
   tone: ToneId;
@@ -13,7 +14,10 @@ interface Props {
 export function TonePicker({ tone, onSelect }: Props) {
   return (
     <div className="tone-row">
-      <span className="tone-label">AI 文风</span>
+      <span className="tone-label">
+        <Icon name="sparkles" size={13} />
+        AI 文风
+      </span>
       <div className="tone-group" role="radiogroup" aria-label="AI 文风">
         {TONES.map((t) => (
           <button
@@ -25,7 +29,7 @@ export function TonePicker({ tone, onSelect }: Props) {
             title={t.hint}
             onClick={() => onSelect(t.id)}
           >
-            {t.label}
+            {t.label.replace(/^[①②③]\s*/, '')}
           </button>
         ))}
       </div>

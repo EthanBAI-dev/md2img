@@ -110,6 +110,7 @@ export async function annotateImageSizes(blocks: Block[]): Promise<void> {
         const img = new Image();
         img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
         img.onerror = () => resolve(null); // 坏图不阻塞排版，退回原样
+        setTimeout(() => resolve(null), 8000); // 既不 load 也不 error 的情况，别让排版一直卡着
         img.src = src;
       });
       cache.set(src, hit);
@@ -156,6 +157,8 @@ export async function waitForAssets(root: ParentNode = document): Promise<void> 
         : new Promise<void>((resolve) => {
             img.addEventListener('load', () => resolve(), { once: true });
             img.addEventListener('error', () => resolve(), { once: true });
+            // 有些失败既不触发 load 也不触发 error（比如地址返回的根本不是图片），不能无限等
+            setTimeout(resolve, 8000);
           }),
     ),
   );

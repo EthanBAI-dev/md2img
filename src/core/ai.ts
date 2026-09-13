@@ -374,6 +374,67 @@ export async function generateCover(
   };
 }
 
+const DOUYIN_SYSTEM_PROMPT = `你是资深的抖音图文运营。用户给你一篇笔记（或一份已经写好的小红书文案），你负责产出抖音「图文」作品的配套文案。
+
+抖音和小红书的写法不一样，严格遵守：
+- 作品标题（titles）不超过 20 个字，给 3 个备选。抖音用户刷得快，标题要在一眼之内给出冲突、结果或数字，不要铺垫
+- 作品描述（body）控制在 80~300 字：第一句就是钩子（反常识结论 / 具体收益 / 直接提问），后面 2~3 句交代这组图讲了什么，最后一句引导「收藏」「关注看下一篇」或抛一个评论区问题
+- 抖音描述不适合长段落和密集 emoji：少分段，整篇 emoji 不超过 3 个
+- 话题（tags）3~5 个，不带 #：1~2 个大流量泛话题 + 2~3 个精准话题。宁少勿滥，话题堆太多会显得像刷量
+- 不要编造原文里没有的事实、数据和结论
+
+只输出 JSON，不要任何解释文字，格式：
+{"titles": ["标题1", "标题2", "标题3"], "body": "作品描述...", "tags": ["话题1", "话题2"]}`;
+
+/**
+ * 抖音版文案。
+ *
+ * 省 token 的关键：已经有小红书文案时，直接拿那份文案（标题+正文+标签，最多一千来字）改写成抖音风格，
+ * 不再把笔记正文重新发一遍（4000 字）。两份文案讲的是同一件事，只是平台腔调不同，信息量完全够用。
+ */
+export async function generateDouyinCopy(
+  note: Note,
+  plainText: string,
+  config: AiConfig,
+  options: { signal?: AbortSignal; tone?: ToneId; fromXhs?: XhsCopy | null } = {},
+): Promise<XhsCopy> {
+  const { signal, tone, fromXhs } = options;
+  const hasRealTitle = note.title && note.title !== '未命名笔记';
+  const source = fromXhs?.body
+    ? [
+        '以下是这篇内容已经写好的小红书文案，请改写成抖音风格：',
+        `标题：${fromXhs.titles[fromXhs.selectedTitle ?? 0] ?? fromXhs.titles[0] ?? ''}`,
+        `正文：${fromXhs.body}`,
+        fromXhs.tags.length ? `小红书标签：${fromXhs.tags.join('、')}` : '',
+      ]
+    : [
+        hasRealTitle ? `笔记标题：${note.title}` : '（这篇笔记还没有标题，请你根据正文自己提炼）',
+        '',
+        '笔记正文：',
+        plainText.slice(0, 3000),
+      ];
+  const userPrompt = source.filter(Boolean).join('\n');
+  const system = tone
+    ? `${DOUYIN_SYSTEM_PROMPT}\n\n额外的文风要求：\n${getTone(tone).copy}`
+    : DOUYIN_SYSTEM_PROMPT;
+  // 3 个标题 + 300 字以内描述 + 5 个话题
+  const content = await chat(system, userPrompt, config, signal, 700);
+  const parsed = extractJson(content) as Record<string, unknown>;
+  const titles = asStringArray(parsed.titles).map((t) => t.slice(0, 20));
+  const tags = asStringArray(parsed.tags)
+    .map((t) => t.replace(/^#/, '').trim())
+    .filter(Boolean)
+    .slice(0, 5);
+  return {
+    titles: titles.length ? titles : [note.title.slice(0, 20)],
+    body: String(parsed.body ?? '').slice(0, 1000),
+    tags: tags.length ? tags : note.tags.slice(0, 5),
+    selectedTitle: 0,
+    // 抖音不需要封面文案，沿用笔记本身的，保持类型一致
+    cover: { title: note.title.slice(0, 16), subtitle: note.subtitle?.slice(0, 24) ?? '', badge: note.badge?.slice(0, 6) ?? '' },
+  };
+}
+
 export async function generateCopy(
   note: Note,
   plainText: string,

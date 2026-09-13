@@ -41,10 +41,20 @@ export async function buildCards(
 
   // mathErrors 单独交给 MathErrorPanel 处理（带「AI 修复」操作），不进 warnings 免得重复提示
   // 图片在这一步才换成 data URL：正文里始终是短路径，编辑框、存储和 AI 都不必背着 base64
-  const body = imageCtx ? inlineImages(note.body, imageCtx).markdown : note.body;
+  const resolved = imageCtx ? inlineImages(note.body, imageCtx) : null;
+  const body = resolved ? resolved.markdown : note.body;
   const { blocks, mathErrors } = parseBlocks(body);
   const ad = normalizeAdOptions(adInput);
   const warnings: string[] = [];
+  // 找不到的图必须明说：它在卡片里是一块空白，导出/发布时还会卡住或报错，
+  // 而用户往往根本没意识到图库没跟过来（比如换了个页面、或图库太大没存下来）
+  if (resolved?.missing.length) {
+    const sample = resolved.missing.slice(0, 2).join('、');
+    warnings.push(
+      `有 ${resolved.missing.length} 张配图没找到（${sample}${resolved.missing.length > 2 ? ' 等' : ''}），` +
+        '卡片里会是空白。重新「打开文件夹」选一次笔记所在目录即可。',
+    );
+  }
 
   await waitForAssets();
   // 必须在建量尺之前：把图片的真实宽高写进 html，否则同步测量会把未解码的图算成 0 高

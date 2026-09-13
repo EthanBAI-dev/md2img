@@ -1,4 +1,5 @@
 import type { RefObject } from 'react';
+import { Icon, type IconName } from './Icon';
 
 interface Props {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -8,10 +9,11 @@ interface Props {
 }
 
 interface ToolButton {
-  label: string;
+  icon: IconName;
   title: string;
   onClick: () => void;
-  className?: string;
+  /** 有文字的按钮（比如「分页线」）会显示成带字的小按钮 */
+  text?: string;
 }
 
 /**
@@ -62,25 +64,25 @@ export function MarkdownToolbar({ textareaRef, value, onChange, onInsertImage }:
 
   const groups: ToolButton[][] = [
     [
-      { label: 'B', title: '粗体', onClick: () => wrap('**', '**', '粗体文字'), className: 'md-tb--bold' },
-      { label: 'I', title: '斜体', onClick: () => wrap('*', '*', '斜体文字'), className: 'md-tb--italic' },
-      { label: 'S', title: '删除线', onClick: () => wrap('~~', '~~', '删除线文字'), className: 'md-tb--strike' },
+      { icon: 'bold', title: '粗体', onClick: () => wrap('**', '**', '粗体文字') },
+      { icon: 'italic', title: '斜体', onClick: () => wrap('*', '*', '斜体文字') },
+      { icon: 'strike', title: '删除线', onClick: () => wrap('~~', '~~', '删除线文字') },
     ],
     [
-      { label: 'H', title: '标题', onClick: () => linePrefix('## ') },
-      { label: '"', title: '引用', onClick: () => linePrefix('> ') },
-      { label: '{ }', title: '行内代码', onClick: () => wrap('`', '`', 'code') },
+      { icon: 'heading', title: '标题', onClick: () => linePrefix('## ') },
+      { icon: 'quote', title: '引用', onClick: () => linePrefix('> ') },
+      { icon: 'code', title: '行内代码', onClick: () => wrap('`', '`', 'code') },
     ],
     [
-      { label: '•', title: '无序列表', onClick: () => linePrefix('- ') },
-      { label: '1.', title: '有序列表', onClick: () => linePrefix('1. ') },
+      { icon: 'listUl', title: '无序列表', onClick: () => linePrefix('- ') },
+      { icon: 'listOl', title: '有序列表', onClick: () => linePrefix('1. ') },
     ],
     [
-      { label: '链接', title: '插入链接', onClick: () => wrap('[', '](https://)', '链接文字') },
-      { label: '图片', title: '插入图片', onClick: onInsertImage },
-      { label: '表格', title: '插入表格', onClick: () => insertBlock('\n| 列1 | 列2 |\n| --- | --- |\n| 内容 | 内容 |\n') },
+      { icon: 'link', title: '插入链接', onClick: () => wrap('[', '](https://)', '链接文字') },
+      { icon: 'image', title: '插入图片', onClick: onInsertImage },
+      { icon: 'table', title: '插入表格', onClick: () => insertBlock('\n| 列1 | 列2 |\n| --- | --- |\n| 内容 | 内容 |\n') },
     ],
-    [{ label: '分页', title: '插入分页线（--- 会强制从这里另起一张卡片）', onClick: () => insertBlock('\n---\n') }],
+    [{ icon: 'scissors', text: '分页线', title: '插入分页线（--- 会强制从这里另起一张卡片）', onClick: () => insertBlock('\n---\n') }],
   ];
 
   return (
@@ -89,13 +91,15 @@ export function MarkdownToolbar({ textareaRef, value, onChange, onInsertImage }:
         <div className="md-toolbar-group" key={i}>
           {group.map((btn) => (
             <button
-              key={btn.label}
+              key={btn.title}
               type="button"
-              className={`md-toolbar-btn ${btn.className ?? ''}`}
+              className={`md-toolbar-btn${btn.text ? ' md-toolbar-btn--text' : ''}`}
               title={btn.title}
+              aria-label={btn.title}
               onClick={btn.onClick}
             >
-              {btn.label}
+              <Icon name={btn.icon} size={btn.text ? 11 : 14} />
+              {btn.text && <span>{btn.text}</span>}
             </button>
           ))}
         </div>

@@ -32,15 +32,18 @@ async function main() {
     minify: true,
   });
 
-  // 3. content script 必须是单个 IIFE，MV3 不支持 module 形式的内容脚本
-  await build({
-    entryPoints: [join(root, 'extension/content-xhs.ts')],
-    outfile: join(out, 'content-xhs.js'),
-    bundle: true,
-    format: 'iife',
-    target: 'chrome114',
-    minify: false, // 选择器要靠人改，保持可读
-  });
+  // 3. content script 必须是单个 IIFE，MV3 不支持 module 形式的内容脚本。
+  // 每个平台一份，公用的 fill-kit 会被分别打进去
+  for (const name of ['content-xhs', 'content-douyin']) {
+    await build({
+      entryPoints: [join(root, `extension/${name}.ts`)],
+      outfile: join(out, `${name}.js`),
+      bundle: true,
+      format: 'iife',
+      target: 'chrome114',
+      minify: false, // 选择器要靠人改，保持可读
+    });
+  }
 
   // 4. manifest 和图标
   await cp(join(root, 'extension/manifest.json'), join(out, 'manifest.json'));

@@ -23,6 +23,8 @@ interface Props {
   onSelect?: () => void;
   onChange: (next: string) => void;
   onRemove?: () => void;
+  /** 整行样式（标题列表用）；不传就是紧凑的小气泡（标签用） */
+  row?: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * 既占地方又要在两处之间来回看。这里合成一个：平时是气泡，鼠标移上去露出铅笔，
  * 点铅笔或双击气泡就地变成输入框，回车/失焦提交，Esc 撤销。
  */
-export function EditableChip({ value, placeholder, maxLength, active, prefix, onSelect, onChange, onRemove }: Props) {
+export function EditableChip({ value, placeholder, maxLength, active, prefix, onSelect, onChange, onRemove, row }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -54,7 +56,7 @@ export function EditableChip({ value, placeholder, maxLength, active, prefix, on
 
   if (editing) {
     return (
-      <span className="chip chip--editing" data-value={draft || placeholder || ''}>
+      <span className={`chip chip--editing${row ? ' chip--row' : ''}`} data-value={draft || placeholder || ''}>
         <input
           ref={inputRef}
           value={draft}
@@ -79,7 +81,7 @@ export function EditableChip({ value, placeholder, maxLength, active, prefix, on
   }
 
   return (
-    <span className={`chip${active ? ' is-active' : ''}`}>
+    <span className={`chip${row ? ' chip--row' : ''}${active ? ' is-active' : ''}`}>
       <button
         type="button"
         className="chip-text"
@@ -108,10 +110,11 @@ interface AddProps {
   maxLength?: number;
   disabled?: boolean;
   onAdd: (value: string) => void;
+  row?: boolean;
 }
 
 /** 虚线「＋」气泡：点一下就地变成输入框，不用在别处另开一个输入行 */
-export function AddChip({ label, placeholder, maxLength, disabled, onAdd }: AddProps) {
+export function AddChip({ label, placeholder, maxLength, disabled, onAdd, row }: AddProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -130,7 +133,7 @@ export function AddChip({ label, placeholder, maxLength, disabled, onAdd }: AddP
 
   if (editing) {
     return (
-      <span className="chip chip--editing" data-value={draft || placeholder}>
+      <span className={`chip chip--editing${row ? ' chip--row' : ''}`} data-value={draft || placeholder}>
         <input
           ref={inputRef}
           value={draft}
@@ -155,7 +158,12 @@ export function AddChip({ label, placeholder, maxLength, disabled, onAdd }: AddP
   }
 
   return (
-    <button type="button" className="chip chip--add" disabled={disabled} onClick={() => setEditing(true)}>
+    <button
+      type="button"
+      className={`chip chip--add${row ? ' chip--row' : ''}`}
+      disabled={disabled}
+      onClick={() => setEditing(true)}
+    >
       ＋ {label}
     </button>
   );

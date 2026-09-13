@@ -5,13 +5,14 @@ import {
   formatAsMarkdown,
   generateCopy,
   generateCover,
+  generateDouyinCopy,
   getTone,
   humanizeMarkdown,
   type AiConfig,
   type ToneId,
   type XhsCopy,
 } from '../core/ai';
-import { downloadBlob, exportCards, safeName, zipImages } from '../core/export';
+import { describeExportError, downloadBlob, exportCards, safeName, zipImages } from '../core/export';
 import { maskImageSources, splitFrontmatterRaw, upsertFrontmatter } from '../core/markdown';
 import { buildFormulaLocators, type MathError } from '../core/math';
 import type { ImageMap } from '../core/images';
@@ -29,6 +30,7 @@ import {
 } from '../core/types';
 import { AdPanel } from './components/AdPanel';
 import { CopyPanel } from './components/CopyPanel';
+import { Icon } from './components/Icon';
 import { MarkdownToolbar } from './components/MarkdownToolbar';
 import { MathErrorPanel } from './components/MathErrorPanel';
 import { Preview } from './components/Preview';
@@ -41,7 +43,7 @@ import { blobToDataUrl, imageToDataUrl } from './fileUtils';
 import { readFolder, type FolderNote } from './folderImport';
 import { DEFAULT_PANEL_RATIO, EQUAL_COLUMNS, useColumnWidths, useRowHeight } from './useColumnWidths';
 import { KEYS, ensureHostPermission, isExtension, loadState, saveState, subscribeState } from './storage';
-import type { PublishPayload } from '../shared/messages';
+import { PUBLISH_TARGETS, type PlatformId, type PublishPayload } from '../shared/messages';
 
 /** 图库落盘的体积上限：网页版 localStorage 通常只有 5~10MB，留足余量给笔记和设置 */
 const IMAGE_STORE_LIMIT = 3 * 1024 * 1024;
@@ -66,6 +68,42 @@ export function App({ variant }: Props) {
   const [copy, setCopy] = useState<XhsCopy | null>(null);
   const [copyLoading, setCopyLoading] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
+  // 抖音版文案单独一份：标题/描述/话题的写法和小红书不同，混用一份发出去两边都不对味
+  const [douyinCopy, setDouyinCopy] = useState<XhsCopy | null>(null);
+  const [douyinLoading, setDouyinLoading] = useState(false);
+  const [douyinError, setDouyinError] = useState<string | null>(null);
+  // 全屏编辑右侧文案栏可收起，腾出宽度给编辑区和预览
+  const [copyCollapsed, setCopyCollapsed] = useState(false);
+  // 浅色/深色。只存本机 localStorage：扩展的侧边栏和全屏编辑页同源，两边读到的是同一份，
+  // 而且同步读取，页面第一帧就是对的主题，不会先闪一下再切
+  const [uiTheme, setUiTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('pm.uiTheme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      /* 读不到就跟随系统 */
+    }
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = uiTheme;
+    try {
+      localStorage.setItem('pm.uiTheme', uiTheme);
+    } catch {
+      /* 存不下不影响使用 */
+    }
+  }, [uiTheme]);
+
+  // 全屏编辑页右上角的 ×：关掉这个标签页、回到侧边栏。
+  // 打开侧边栏的 API 只允许在用户点击的那一刻同步调用，一 await 就失效，
+  // 所以当前标签页和窗口 id 要提前查好存着，点击时直接用
+  const selfTab = useRef<{ tabId?: number; windowId?: number }>({});
+  useEffect(() => {
+    if (variant !== 'web' || !isExtension || !chrome.tabs?.getCurrent) return;
+    void chrome.tabs.getCurrent().then((tab) => {
+      selfTab.current = { tabId: tab?.id, windowId: tab?.windowId };
+    });
+  }, [variant]);
   const [formatting, setFormatting] = useState(false);
   const [humanizing, setHumanizing] = useState(false);
   const [coverLoading, setCoverLoading] = useState(false);
@@ -92,7 +130,7 @@ export function App({ variant }: Props) {
   // 恢复上次的编辑内容和设置
   useEffect(() => {
     (async () => {
-      const [md, opts, savedAd, ai, savedCopy, author, savedTone, savedImages, savedCols, savedRatio] = await Promise.all([
+      const [md, opts, savedAd, ai, savedCopy, author, savedTone, savedImages, savedCols, savedRatio, savedDouyin, savedCollapsed] = await Promise.all([
         loadState<string | null>(KEYS.markdown, null),
         loadState<RenderOptions>(KEYS.options, DEFAULT_RENDER_OPTIONS),
         loadState<AdOptions>(KEYS.ad, DEFAULT_AD_OPTIONS),
@@ -103,12 +141,16 @@ export function App({ variant }: Props) {
         loadState<[string, string][]>(KEYS.images, []),
         loadState<[number, number, number]>(KEYS.columns, EQUAL_COLUMNS),
         loadState<number>(KEYS.panelRatio, DEFAULT_PANEL_RATIO),
+        loadState<XhsCopy | null>(KEYS.copyDouyin, null),
+        loadState<boolean>(KEYS.copyCollapsed, false),
       ]);
       if (md) setMarkdown(md);
       setOptions(normalizeRenderOptions(opts));
       setAdOptions(normalizeAdOptions(savedAd));
       setAiConfig({ ...DEFAULT_AI, ...ai });
       if (savedCopy) setCopy(savedCopy);
+      if (savedDouyin) setDouyinCopy(savedDouyin);
+      setCopyCollapsed(!!savedCollapsed);
       setDefaultAuthor(author);
       setTone(savedTone);
       if (savedImages?.length) setFolderImages(new Map(savedImages));
@@ -130,6 +172,12 @@ export function App({ variant }: Props) {
   useEffect(() => {
     if (restored) void saveState(KEYS.copy, copy);
   }, [copy, restored]);
+  useEffect(() => {
+    if (restored) void saveState(KEYS.copyDouyin, douyinCopy);
+  }, [douyinCopy, restored]);
+  useEffect(() => {
+    if (restored) void saveState(KEYS.copyCollapsed, copyCollapsed);
+  }, [copyCollapsed, restored]);
   useEffect(() => {
     if (restored) void saveState(KEYS.tone, tone);
   }, [tone, restored]);
@@ -172,11 +220,32 @@ export function App({ variant }: Props) {
     const unsubTone = subscribeState<ToneId>(KEYS.tone, (incoming) => {
       setTone((cur) => (incoming !== cur ? incoming : cur));
     });
+    // 图库也得同步：正文里只存图片短路径，笔记同步过来了但图库没跟上，
+    // 这边的卡片就全是空白图，导出/发布时还会因为坏图失败。
+    // 以前漏了这一条——在全屏编辑里打开文件夹，回到侧边栏发布就会「发送失败」
+    // 文案同样两边同步：在全屏编辑里写好文案，回侧边栏点发布要能用上
+    const sameJson = <T,>(a: T, b: T) => JSON.stringify(a) === JSON.stringify(b);
+    const unsubCopy = subscribeState<XhsCopy | null>(KEYS.copy, (incoming) =>
+      setCopy((cur) => (sameJson(cur, incoming) ? cur : incoming)),
+    );
+    const unsubDouyin = subscribeState<XhsCopy | null>(KEYS.copyDouyin, (incoming) =>
+      setDouyinCopy((cur) => (sameJson(cur, incoming) ? cur : incoming)),
+    );
+    const unsubImages = subscribeState<[string, string][]>(KEYS.images, (incoming) => {
+      if (!Array.isArray(incoming) || !incoming.length) return; // 空表可能是超限没存，不能拿它清掉内存里的图
+      setFolderImages((cur) => {
+        if (cur.size === incoming.length && incoming.every(([k, v]) => cur.get(k) === v)) return cur;
+        return new Map(incoming);
+      });
+    });
     return () => {
       unsubMd();
       unsubOpts();
       unsubAd();
       unsubTone();
+      unsubImages();
+      unsubCopy();
+      unsubDouyin();
     };
   }, [restored]);
 
@@ -313,9 +382,14 @@ export function App({ variant }: Props) {
    * 改成直接开一个新标签页跑网页版（编辑区/预览区左右分栏，屏幕多大就能用多大），
    * 两边的笔记内容都走同一套自动保存，开出来就是最新内容。
    */
-  const openFullEditor = () => {
+  const openFullEditor = async () => {
     if (isExtension && chrome.tabs) {
-      void chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+      await chrome.tabs.create({ url: chrome.runtime.getURL('index.html') });
+      // 从侧边栏点的就顺手把侧边栏关掉：全屏编辑已经有完整的编辑/预览/文案，
+      // 侧边栏再开着只是挤占网页宽度，还是同一份内容的第二个副本。
+      // 侧边栏页面调用 window.close() 就是关闭侧边栏本身（Chrome 的约定用法）。
+      // 内容已经实时存盘，关掉不会丢东西。
+      if (variant === 'panel') window.close();
       return;
     }
     window.open(new URL('index.html', window.location.href).toString(), '_blank');
@@ -325,14 +399,23 @@ export function App({ variant }: Props) {
     if (!result?.cards.length) return;
     setBusy('正在生成图片…');
     try {
-      const images = await exportCards(result.cards, options, (done, total) =>
-        setBusy(`正在生成第 ${done}/${total} 张…`),
+      let broken: string[] = [];
+      const images = await exportCards(
+        result.cards,
+        options,
+        (done, total) => setBusy(`正在生成第 ${done}/${total} 张…`),
+        1,
+        (srcs) => (broken = srcs),
       );
       const zip = await zipImages(images, result.note.title);
       downloadBlob(zip, `${safeName(result.note.title)}.zip`);
-      showToast(`已导出 ${images.length} 张图片`);
+      showToast(
+        broken.length
+          ? `已导出 ${images.length} 张，但有 ${broken.length} 张配图没加载出来，图里是空白`
+          : `已导出 ${images.length} 张图片`,
+      );
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '导出失败');
+      showToast(`导出失败：${describeExportError(err)}`);
     } finally {
       setBusy(null);
     }
@@ -365,6 +448,24 @@ export function App({ variant }: Props) {
     }
   };
 
+
+  const handleGenerateDouyin = async () => {
+    if (!result) return;
+    setDouyinLoading(true);
+    setDouyinError(null);
+    try {
+      const plain = result.cards
+        .flatMap((c) => (c.kind === 'content' ? c.blocks.map((b) => b.text) : []))
+        .join('\n');
+      const generated = await generateDouyinCopy(result.note, plain, aiConfig, { tone, fromXhs: copy });
+      setDouyinCopy(generated);
+      showToast(copy?.body ? '已按小红书文案改写成抖音版（没有重发笔记正文）' : '已生成抖音文案');
+    } catch (err) {
+      setDouyinError(err instanceof Error ? err.message : '生成失败');
+    } finally {
+      setDouyinLoading(false);
+    }
+  };
 
   /**
    * 取要交给 AI 改写的范围。
@@ -488,26 +589,43 @@ export function App({ variant }: Props) {
     }
   };
 
-  const handleSendToCreator = async () => {
+  const handleSendToCreator = async (platform: PlatformId) => {
     if (!result?.cards.length) return;
+    const target = PUBLISH_TARGETS[platform];
     setBusy('正在准备图片…');
     try {
-      const images = await exportCards(result.cards, options, (done, total) =>
-        setBusy(`正在生成第 ${done}/${total} 张…`),
+      let broken: string[] = [];
+      const images = await exportCards(
+        result.cards,
+        options,
+        (done, total) => setBusy(`正在生成第 ${done}/${total} 张…`),
+        1,
+        (srcs) => (broken = srcs),
       );
-      setBusy('正在打开创作平台…');
+      if (broken.length) {
+        showToast(`有 ${broken.length} 张配图没加载出来，发出去会是空白图。先重新「打开文件夹」再发`);
+        return;
+      }
+      setBusy(`正在打开${target.name}创作台…`);
+      // 各平台用各自那份文案；抖音版还没写时退回小红书那份，按抖音的上限裁一下
+      const source = platform === 'douyin' ? (douyinCopy ?? copy) : copy;
       const payload: PublishPayload = {
+        platform,
         images: await Promise.all(images.map((i) => blobToDataUrl(i.blob))),
-        title: (copy?.titles[copy?.selectedTitle ?? 0] ?? copy?.titles[0] ?? result.note.title).slice(0, 20),
-        body: copy?.body ?? '',
-        tags: copy?.tags ?? result.note.tags,
+        title: (source?.titles[source?.selectedTitle ?? 0] ?? source?.titles[0] ?? result.note.title).slice(0, target.titleMax),
+        body: (source?.body ?? '').slice(0, target.bodyMax),
+        tags: (source?.tags ?? result.note.tags).slice(0, target.tagMax),
         createdAt: Date.now(),
       };
       await chrome.storage.local.set({ [KEYS.payload]: payload });
-      await chrome.runtime.sendMessage({ type: 'TEXTPIC_PUBLISH' });
-      showToast('已发送到小红书创作台，切到那个标签页看看');
+      // 不等填表结果：填表要传图、等页面跳转，动辄几十秒，进度看创作台页面右侧的抽屉
+      chrome.runtime.sendMessage({ type: 'TEXTPIC_PUBLISH', platform }).catch(() => {
+        /* 侧边栏可能在填表过程中被关掉，回执收不到无所谓，结果在抽屉里 */
+      });
+      showToast(`已发送到${target.name}创作台，进度看那个页面右侧的抽屉`);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '发送失败');
+      // 以前这里对非 Error 的异常只显示「发送失败」四个字，根本看不出是哪一步坏的
+      showToast(`发送失败：${describeExportError(err)}`);
     } finally {
       setBusy(null);
     }
@@ -520,11 +638,37 @@ export function App({ variant }: Props) {
     return list;
   }, [result, buildError]);
 
+  /** 全屏编辑页右上角 ×：先打开侧边栏（必须在点击当下同步调用），成功后再关掉本标签页 */
+  const exitFullEditor = () => {
+    const { tabId, windowId } = selfTab.current;
+    const closeSelf = () => {
+      if (tabId !== undefined) void chrome.tabs.remove(tabId);
+      else window.close();
+    };
+    if (windowId === undefined || !chrome.sidePanel?.open) {
+      closeSelf();
+      return;
+    }
+    chrome.sidePanel
+      .open({ windowId })
+      .then(closeSelf)
+      .catch(() => {
+        // 打不开侧边栏时不关页面，免得用户两边都看不到
+        showToast('侧边栏没能自动打开，请点浏览器工具栏上的「文图」图标');
+      });
+  };
+
   const notePanel = (
-    <div className="panel">
-      <header className="panel-head">
-        <h3>笔记内容</h3>
-        <span className="counter">{markdown.length} 字符</span>
+    <div className="panel note-panel">
+      <header className="bar">
+        <div className="bar-title">
+          <Icon name="pen" size={13} />
+          <span>笔记内容</span>
+          {restored && <span className="badge badge--ok">已自动保存</span>}
+        </div>
+        <span className="bar-meta">
+          {markdown.length} 字符 · {cards.length} 张卡片
+        </span>
       </header>
       {variant === 'web' && (
         <MarkdownToolbar
@@ -534,133 +678,131 @@ export function App({ variant }: Props) {
           onInsertImage={() => imageRef.current?.click()}
         />
       )}
-      <textarea
-        ref={noteTextareaRef}
-        className="editor"
-        value={markdown}
-        spellCheck={false}
-        placeholder={
-          variant === 'web'
-            ? '# 标题\n\n正文… 支持 $E=mc^2$ 公式、代码块、表格\n\n用 --- 强制分页\n\n图片可以直接拖进来，或者 Ctrl+V 粘贴'
-            : '# 标题\n\n正文… 支持 $E=mc^2$ 公式、代码块、表格\n\n用 --- 强制分页\n\n图片可以直接拖进来'
-        }
-        onChange={(e) => setMarkdown(e.target.value)}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={async (e) => {
-          e.preventDefault();
-          const files = Array.from(e.dataTransfer.files);
-          const image = files.find((f) => f.type.startsWith('image/'));
-          if (image) {
-            await insertImageFile(image);
-            return;
-          }
-          const doc = files[0];
-          if (doc) void openFile(doc);
-        }}
-        onPaste={async (e) => {
-          // 参考 Madopic 的剪贴板粘图：复制一张图直接 Ctrl+V 粘进来，不用先存文件再选
-          const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith('image/'));
-          if (!item) return; // 粘贴的是文字，交给浏览器默认行为
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) await insertImageFile(file);
-        }}
-      />
-      {/* 一个文件夹里有多篇笔记时，图片只需读一次，切换笔记复用同一份图库 */}
-      {folderNotes.length > 1 && (
-        <div className="folder-row">
-          <span className="folder-label">文件夹（{folderImages.size} 张图）</span>
-          <select
-            className="folder-select"
-            value={currentNote?.path ?? ''}
-            onChange={(e) => {
-              const picked = folderNotes.find((n) => n.path === e.target.value);
-              if (picked) loadNote(picked);
-            }}
-          >
-            <option value="" disabled>
-              选一篇笔记…
-            </option>
-            {folderNotes.map((n) => (
-              <option key={n.path} value={n.path}>
-                {n.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      {/* 笔记用 <picture> 给了手机/电脑两套图时才有得选 */}
-      {currentNote && folderImages.size > 0 && (
-        <div className="folder-row">
-          <span className="folder-label">配图版本</span>
-          <div className="tone-group" role="radiogroup" aria-label="配图版本">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={figureNarrow}
-              className={`tone-btn${figureNarrow ? ' is-active' : ''}`}
-              title="用作者给窄屏准备的竖版图，占版面大、细节多"
-              onClick={() => setFigureNarrow(true)}
-            >
-              手机版
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!figureNarrow}
-              className={`tone-btn${!figureNarrow ? ' is-active' : ''}`}
-              title="用宽扁的桌面版图，占高度小、卡片数更少"
-              onClick={() => setFigureNarrow(false)}
-            >
-              电脑版
-            </button>
-          </div>
+
+      {/* 打开文件夹后才有：多篇笔记切换 + 手机/电脑版配图 */}
+      {(folderNotes.length > 1 || (currentNote && folderImages.size > 0)) && (
+        <div className="context-bar">
+          {folderNotes.length > 1 && (
+            <div className="context-folder">
+              <Icon name="folder" size={13} className="folder-icon" />
+              <span className="context-label">{folderImages.size} 张图</span>
+              <select
+                className="folder-select"
+                value={currentNote?.path ?? ''}
+                onChange={(e) => {
+                  const picked = folderNotes.find((n) => n.path === e.target.value);
+                  if (picked) loadNote(picked);
+                }}
+              >
+                <option value="" disabled>
+                  选一篇笔记…
+                </option>
+                {folderNotes.map((n) => (
+                  <option key={n.path} value={n.path}>
+                    {n.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {currentNote && folderImages.size > 0 && (
+            <div className="segmented segmented--mini" role="radiogroup" aria-label="配图版本">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={figureNarrow}
+                className={figureNarrow ? 'is-active' : ''}
+                title="用作者给窄屏准备的竖版图，占版面大、细节多"
+                onClick={() => setFigureNarrow(true)}
+              >
+                手机版
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!figureNarrow}
+                className={!figureNarrow ? 'is-active' : ''}
+                title="用宽扁的桌面版图，占高度小、卡片数更少"
+                onClick={() => setFigureNarrow(false)}
+              >
+                电脑版
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {/* 文风档位放在两个 AI 按钮正上方：它同时决定「AI 去味」怎么改正文、
-          以及右边「AI 生成」写出什么腔调的小红书文案，一处选择两处生效 */}
-      <TonePicker tone={tone} onSelect={setTone} />
-      <div className="field-actions">
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={!markdown.trim() || formatting}
-          onClick={handleFormatMarkdown}
-          title="粘贴的是一段没有标题、没有列表的大白话文本？点这个让 AI 帮你加上标题和列表"
-        >
-          {formatting ? '整理中…' : 'AI 排版'}
-        </button>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={!markdown.trim() || humanizing}
-          onClick={handleHumanize}
-          title={`按「${getTone(tone).label}」改写正文：${getTone(tone).hint}。只改措辞，不动结构和数字`}
-        >
-          {humanizing ? '改写中…' : 'AI 去味'}
-        </button>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={!cards.length || coverLoading}
-          onClick={handleGenerateCover}
-          title="只提炼封面的大标题/副标题/分类标签，写回 frontmatter。只发正文开头 700 字，比整套文案生成省很多"
-        >
-          {coverLoading ? '生成中…' : 'AI 封面'}
-        </button>
-        {variant === 'web' ? (
-          insertingImage && <span className="busy">插入中…</span>
-        ) : (
+      <div className="editor-wrap">
+        <textarea
+          ref={noteTextareaRef}
+          className="editor"
+          value={markdown}
+          spellCheck={false}
+          placeholder={
+            variant === 'web'
+              ? '# 标题\n\n正文… 支持 $E=mc^2$ 公式、代码块、表格\n\n用 --- 强制分页\n\n图片可以直接拖进来，或者 Ctrl+V 粘贴'
+              : '# 标题\n\n正文… 支持 $E=mc^2$ 公式、代码块、表格\n\n用 --- 强制分页\n\n图片可以直接拖进来'
+          }
+          onChange={(e) => setMarkdown(e.target.value)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={async (e) => {
+            e.preventDefault();
+            const files = Array.from(e.dataTransfer.files);
+            const image = files.find((f) => f.type.startsWith('image/'));
+            if (image) {
+              await insertImageFile(image);
+              return;
+            }
+            const doc = files[0];
+            if (doc) void openFile(doc);
+          }}
+          onPaste={async (e) => {
+            // 参考 Madopic 的剪贴板粘图：复制一张图直接 Ctrl+V 粘进来，不用先存文件再选
+            const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith('image/'));
+            if (!item) return; // 粘贴的是文字，交给浏览器默认行为
+            e.preventDefault();
+            const file = item.getAsFile();
+            if (file) await insertImageFile(file);
+          }}
+        />
+      </div>
+
+      {/* 固定在编辑栏底部：文风档位同时决定「AI 去味」怎么改正文、以及文案的腔调 */}
+      <div className="ai-dock">
+        <TonePicker tone={tone} onSelect={setTone} />
+        <div className="ai-grid">
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={openFullEditor}
-            title="在新标签页里打开，屏幕更大，还有完整的编辑工具栏和插入图片"
+            className="btn btn--soft btn--sm"
+            disabled={!markdown.trim() || formatting}
+            onClick={handleFormatMarkdown}
+            title="粘贴的是一段没有标题、没有列表的大白话文本？让 AI 帮你加上标题和列表。选中一段再点只处理这一段"
           >
-            全屏编辑 ↗
+            <Icon name={formatting ? 'spinner' : 'alignLeft'} size={12} className={formatting ? 'spin' : ''} />
+            {formatting ? '整理中…' : 'AI 排版'}
           </button>
-        )}
+          <button
+            type="button"
+            className="btn btn--soft btn--sm"
+            disabled={!markdown.trim() || humanizing}
+            onClick={handleHumanize}
+            title={`按「${getTone(tone).label}」改写正文：${getTone(tone).hint}。只改措辞，不动结构和数字。选中一段再点只处理这一段`}
+          >
+            <Icon name={humanizing ? 'spinner' : 'leaf'} size={12} className={humanizing ? 'spin' : 'green-icon'} />
+            {humanizing ? '改写中…' : 'AI 去味'}
+          </button>
+          <button
+            type="button"
+            className="btn btn--soft btn--sm"
+            disabled={!cards.length || coverLoading}
+            onClick={handleGenerateCover}
+            title="只提炼封面的大标题/副标题/分类标签，写回 frontmatter。只发正文开头 700 字，比整套文案生成省很多"
+          >
+            <Icon name={coverLoading ? 'spinner' : 'image'} size={12} className={coverLoading ? 'spin' : 'indigo-icon'} />
+            {coverLoading ? '生成中…' : 'AI 封面'}
+          </button>
+        </div>
+        {insertingImage && <span className="hint">图片插入中…</span>}
         <input
           ref={imageRef}
           type="file"
@@ -677,68 +819,69 @@ export function App({ variant }: Props) {
   );
 
   const stylePanel = (
-    <div className="panel">
-      <header className="panel-head">
-        <h3>样式</h3>
-        <span className="counter">
-          {cards.length} / {MAX_CARDS} 张
-        </span>
-      </header>
+    <div className="panel style-panel">
+      <div className="section-label">预设主题模板</div>
       <ThemePicker themeId={options.themeId} onSelect={(themeId) => setOptions({ ...options, themeId })} />
 
-      <div className="control-row">
-        <label htmlFor="fontScale">正文字号</label>
-        <input
-          id="fontScale"
-          type="range"
-          min={0.5}
-          max={1.3}
-          step={0.01}
-          value={options.fontScale}
-          onChange={(e) => setOptions({ ...options, fontScale: Number(e.target.value) })}
-        />
-        <span className="counter">{Math.round(options.fontScale * 100)}%</span>
-      </div>
-      {/* 竖图撑满卡片宽度后往往比一整页还高，这里封顶。图片切不开，
-          调小它是让竖图和正文挤进同一页最直接的办法 */}
-      <div className="control-row">
-        <label htmlFor="imageMaxHeight">图片高度</label>
-        <input
-          id="imageMaxHeight"
-          type="range"
-          min={IMAGE_H_MIN}
-          max={IMAGE_H_MAX}
-          step={20}
-          value={options.imageMaxHeight}
-          onChange={(e) => setOptions({ ...options, imageMaxHeight: Number(e.target.value) })}
-        />
-        <span className="counter">{options.imageMaxHeight}px</span>
-      </div>
-      <div className="control-row control-row--checks">
-        <label>
-          <input
-            type="checkbox"
-            checked={options.pageNumber}
-            onChange={(e) => setOptions({ ...options, pageNumber: e.target.checked })}
-          />
-          显示页码
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={options.showAuthor}
-            onChange={(e) => setOptions({ ...options, showAuthor: e.target.checked })}
-          />
-          显示署名
-        </label>
-        <label title="关掉后每页尽量塞满，代价是标题可能落在页尾、正文翻到下一页">
-          <input
-            type="checkbox"
-            checked={options.keepHeadingWithBody}
-            onChange={(e) => setOptions({ ...options, keepHeadingWithBody: e.target.checked })}
-          />
-          标题不留在页尾
-        </label>
+      <div className="style-controls">
+        <div className="slider-col">
+          <label className="slider">
+            <span className="slider-head">
+              <span>正文字号</span>
+              <b>{Math.round(options.fontScale * 100)}%</b>
+            </span>
+            <input
+              type="range"
+              min={0.5}
+              max={1.3}
+              step={0.01}
+              value={options.fontScale}
+              onChange={(e) => setOptions({ ...options, fontScale: Number(e.target.value) })}
+            />
+          </label>
+          {/* 竖图撑满卡片宽度后往往比一整页还高，这里封顶。图片切不开，
+              调小它是让竖图和正文挤进同一页最直接的办法 */}
+          <label className="slider">
+            <span className="slider-head">
+              <span>图片高度上限</span>
+              <b>{options.imageMaxHeight} px</b>
+            </span>
+            <input
+              type="range"
+              min={IMAGE_H_MIN}
+              max={IMAGE_H_MAX}
+              step={20}
+              value={options.imageMaxHeight}
+              onChange={(e) => setOptions({ ...options, imageMaxHeight: Number(e.target.value) })}
+            />
+          </label>
+        </div>
+        <div className="check-col">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={options.pageNumber}
+              onChange={(e) => setOptions({ ...options, pageNumber: e.target.checked })}
+            />
+            显示页码
+          </label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={options.showAuthor}
+              onChange={(e) => setOptions({ ...options, showAuthor: e.target.checked })}
+            />
+            显示署名{defaultAuthor ? `（@${defaultAuthor}）` : ''}
+          </label>
+          <label className="check" title="关掉后每页尽量塞满，代价是标题可能落在页尾、正文翻到下一页">
+            <input
+              type="checkbox"
+              checked={options.keepHeadingWithBody}
+              onChange={(e) => setOptions({ ...options, keepHeadingWithBody: e.target.checked })}
+            />
+            标题不留在页尾
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -747,74 +890,146 @@ export function App({ variant }: Props) {
 
   const watermarkPanel = <WatermarkPanel options={options} onChange={setOptions} />;
 
+  const manualCopy = (): XhsCopy => ({
+    titles: [result?.note.title.slice(0, 20) ?? ''],
+    body: '',
+    tags: result?.note.tags.slice(0, 10) ?? [],
+    selectedTitle: 0,
+    cover: {
+      title: result?.note.title.slice(0, 16) ?? '',
+      subtitle: result?.note.subtitle?.slice(0, 24) ?? '',
+      badge: result?.note.badge?.slice(0, 6) ?? '',
+    },
+  });
+
+  // 发布按钮放进各自的文案标签页底部：看着哪份文案，就发哪个平台
+  const publishDisabled = !cards.length || !!busy;
   const copyPanel = (
     <CopyPanel
+      platform="xiaohongshu"
       copy={copy}
       loading={copyLoading}
       error={copyError}
       onGenerate={handleGenerateCopy}
       onChange={setCopy}
-      onCreateManual={() =>
-        setCopy({
-          titles: [result?.note.title.slice(0, 20) ?? ''],
-          body: '',
-          tags: result?.note.tags.slice(0, 10) ?? [],
-          selectedTitle: 0,
-          cover: {
-            title: result?.note.title.slice(0, 16) ?? '',
-            subtitle: result?.note.subtitle?.slice(0, 24) ?? '',
-            badge: result?.note.badge?.slice(0, 6) ?? '',
-          },
-        })
+      onCreateManual={() => setCopy(manualCopy())}
+      onPublish={isExtension ? () => void handleSendToCreator('xiaohongshu') : undefined}
+      publishDisabled={publishDisabled}
+    />
+  );
+  const douyinPanel = (
+    <CopyPanel
+      platform="douyin"
+      copy={douyinCopy}
+      loading={douyinLoading}
+      error={douyinError}
+      onGenerate={handleGenerateDouyin}
+      onChange={setDouyinCopy}
+      onCreateManual={() => setDouyinCopy({ ...manualCopy(), tags: result?.note.tags.slice(0, 5) ?? [] })}
+      generateHint={
+        copy?.body
+          ? '会按已写好的小红书文案改写成抖音风格，不重新发送笔记正文，更省 token'
+          : '还没有小红书文案，会直接根据笔记生成'
       }
+      onPublish={isExtension ? () => void handleSendToCreator('douyin') : undefined}
+      publishDisabled={publishDisabled}
     />
   );
 
   const previewSection = (
     <>
       <MathErrorPanel errors={result?.mathErrors ?? []} onFix={handleFixFormula} />
-      {warnings.length > 0 && (
-        <div className="alerts">
-          {warnings.map((w, i) => (
-            <p key={i} className="alert">
-              {w}
-            </p>
-          ))}
-        </div>
-      )}
+      {warnings.map((w, i) => (
+        <p key={i} className="alert-strip">
+          <Icon name="alert" size={13} />
+          <span>{w}</span>
+        </p>
+      ))}
       <Preview cards={cards} options={options} variant={variant} />
     </>
+  );
+
+  const settingTabs = [
+    { id: 'style', label: '样式', content: stylePanel },
+    { id: 'watermark', label: '水印', dot: options.watermark.enabled, dotColor: 'green' as const, content: watermarkPanel },
+    { id: 'ad', label: '广告页', dot: adOptions.enabled, dotColor: 'amber' as const, content: adPanel },
+  ];
+  const copyTabs = [
+    { id: 'xhs', label: '小红书', dot: !!copy, dotColor: 'red' as const, content: copyPanel },
+    { id: 'douyin', label: '抖音', dot: !!douyinCopy, dotColor: 'douyin' as const, content: douyinPanel },
+  ];
+  const cardCount = (
+    <span className="bar-meta">
+      <b>{cards.length}</b> / {MAX_CARDS} 张卡片
+    </span>
   );
 
   return (
     <div className={`app app--${variant}`}>
       <header className="topbar">
         <div className="brand">
-          <span className="brand-dot" />
+          <span className="brand-logo">
+            <Icon name="layers" size={15} />
+          </span>
           <b>文图</b>
-          <span className="brand-sub">TextPIC · Markdown 转图文卡片</span>
+          <span className="brand-sub">TextPIC · Markdown 转小红书/抖音图文卡片</span>
         </div>
         <div className="topbar-actions">
           <button
             type="button"
             className="btn btn--ghost btn--sm"
-            onClick={() => fileRef.current?.click()}
-            title="支持 .md / .markdown / .txt"
+            onClick={() => setUiTheme(uiTheme === 'dark' ? 'light' : 'dark')}
+            title={uiTheme === 'dark' ? '切换到浅色' : '切换到深色'}
           >
-            打开文件
+            <Icon name={uiTheme === 'dark' ? 'moon' : 'sun'} size={13} className={uiTheme === 'dark' ? '' : 'sun-icon'} />
+            <span className="btn-label">{uiTheme === 'dark' ? '深色' : '浅色'}</span>
+          </button>
+          <span className="topbar-divider" />
+          <button
+            type="button"
+            className="btn btn--outline btn--sm"
+            onClick={() => fileRef.current?.click()}
+            title="打开文件（支持 .md / .markdown / .txt）"
+          >
+            <Icon name="file" size={13} />
+            <span className="btn-label">打开文件</span>
           </button>
           <button
             type="button"
-            className="btn btn--ghost btn--sm"
+            className="btn btn--outline btn--sm"
             disabled={!!folderLoading}
             onClick={() => folderRef.current?.click()}
-            title="选中笔记所在的整个文件夹，md 和图片一起读进来，笔记里的相对图片路径会自动内联"
+            title="选中笔记所在的整个文件夹，md 和图片一起读进来"
           >
-            {folderLoading ?? '打开文件夹'}
+            <Icon name="folder" size={13} />
+            <span className="btn-label">{folderLoading ?? '打开文件夹'}</span>
           </button>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => setShowSettings(true)}>
-            设置
+          <button type="button" className="btn btn--outline btn--sm" onClick={() => setShowSettings(true)} title="设置">
+            <Icon name="gear" size={13} />
+            <span className="btn-label">设置</span>
           </button>
+          {variant === 'panel' && (
+            <button
+              type="button"
+              className="btn btn--outline btn--sm"
+              onClick={() => void openFullEditor()}
+              title="在新标签页里全屏编辑（侧边栏会自动关闭）"
+            >
+              <Icon name="external" size={13} />
+              <span className="btn-label">全屏</span>
+            </button>
+          )}
+          {variant === 'web' && isExtension && (
+            <button
+              type="button"
+              className="close-btn"
+              onClick={exitFullEditor}
+              title="退出全屏编辑，回到侧边栏"
+              aria-label="退出全屏编辑，回到侧边栏"
+            >
+              <Icon name="x" size={15} />
+            </button>
+          )}
         </div>
         <input
           ref={fileRef}
@@ -842,12 +1057,9 @@ export function App({ variant }: Props) {
       </header>
 
       {variant === 'web' ? (
-        // 三栏：编辑器 | 样式 + 预览（样式在上边） | 文案，参考 Madopic 的左编右预，
-        // 加一栏放我们特有的小红书文案（Madopic 没有这个，它没有发布场景）
-        // 三栏各自锁死在一屏高度内：编辑器占满左栏；中栏图在上、设置在下；
-        // 右栏是文案和广告两个标签。功能面板全收进标签页，不再往下追加，
-        // 否则每加一个功能整列就长一截，最后逼着整页上下滚
-        <main className="layout layout--3col" style={columns.style}>
+        // 三栏各自锁死在一屏高度内：编辑器占满左栏；中栏图在上、设置在下；右栏是两个平台的文案。
+        // 功能面板全收进标签页，不再往下追加，否则每加一个功能整列就长一截，最后逼着整页上下滚
+        <main className={`layout layout--3col${copyCollapsed ? ' layout--copy-collapsed' : ''}`} style={columns.style}>
           <section className="col col--edit">{notePanel}</section>
           <div
             role="separator"
@@ -872,64 +1084,74 @@ export function App({ variant }: Props) {
               onPointerDown={panelRow.startDrag}
               onDoubleClick={panelRow.reset}
             />
-            <TabbedPanel
-              tabs={[
-                { id: 'style', label: '样式', content: stylePanel },
-                { id: 'watermark', label: '水印', dot: options.watermark.enabled, content: watermarkPanel },
-                { id: 'ad', label: '广告页', dot: adOptions.enabled, content: adPanel },
-              ]}
-            />
+            <TabbedPanel tabs={settingTabs} actions={cardCount} />
           </section>
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label="拖动调整左右两栏宽度，双击恢复等宽"
             title="拖动调整宽度，双击恢复等宽"
-            className={`col-splitter${columns.dragging === 1 ? ' is-dragging' : ''}`}
+            className={`col-splitter col-splitter--copy${columns.dragging === 1 ? ' is-dragging' : ''}`}
             onPointerDown={columns.startDrag(1)}
             onDoubleClick={columns.reset}
           />
           <section className="col col--copy">
-            <TabbedPanel fill tabs={[{ id: 'copy', label: '小红书文案', content: copyPanel }]} />
+            {copyCollapsed ? (
+              <button type="button" className="copy-rail" title="展开文案栏" onClick={() => setCopyCollapsed(false)}>
+                <Icon name="chevronLeft" size={13} />
+                <span className="copy-rail-dot" />
+                <span className="copy-rail-text">文案</span>
+              </button>
+            ) : (
+              <TabbedPanel
+                fill
+                tabs={copyTabs}
+                actions={
+                  <button
+                    type="button"
+                    className="link-btn link-btn--muted"
+                    title="收起文案栏"
+                    onClick={() => setCopyCollapsed(true)}
+                  >
+                    收起
+                    <Icon name="chevronRight" size={12} />
+                  </button>
+                }
+              />
+            )}
           </section>
         </main>
       ) : (
-        <main className="layout">
+        <main className="layout layout--panel">
           <section className="col">
             {notePanel}
             {previewSection}
-            <TabbedPanel
-              tabs={[
-                { id: 'style', label: '样式', content: stylePanel },
-                { id: 'watermark', label: '水印', dot: options.watermark.enabled, content: watermarkPanel },
-                { id: 'copy', label: '文案', content: copyPanel },
-                { id: 'ad', label: '广告页', dot: adOptions.enabled, content: adPanel },
-              ]}
-            />
+            <TabbedPanel tabs={[settingTabs[0], settingTabs[1], ...copyTabs, settingTabs[2]]} />
           </section>
         </main>
       )}
 
       <footer className="actionbar">
-        <button
-          type="button"
-          className="btn btn--primary"
-          disabled={!cards.length || !!busy}
-          onClick={handleExport}
-        >
-          导出 {cards.length} 张 PNG
-        </button>
-        {isExtension && (
-          <button
-            type="button"
-            className="btn btn--accent"
-            disabled={!cards.length || !!busy}
-            onClick={handleSendToCreator}
-          >
-            一键填入小红书创作台
+        <div className="status">
+          {busy ? (
+            <>
+              <Icon name="spinner" size={12} className="spin" />
+              <span>{busy}</span>
+            </>
+          ) : (
+            <>
+              <span className="status-dot" />
+              <span>就绪 · 1080×1440</span>
+            </>
+          )}
+        </div>
+        <div className="actionbar-right">
+          <span className="hint actionbar-hint">打包成 ZIP 下载</span>
+          <button type="button" className="btn btn--dark" disabled={!cards.length || !!busy} onClick={handleExport}>
+            <Icon name="download" size={13} />
+            导出 {cards.length} 张 PNG
           </button>
-        )}
-        {busy && <span className="busy">{busy}</span>}
+        </div>
       </footer>
 
       {showSettings && (

@@ -1,4 +1,4 @@
-import { CREATOR_URL } from '../src/shared/messages';
+import { PUBLISH_TARGETS, type PanelToBackground, type PlatformId } from '../src/shared/messages';
 
 // 点扩展图标直接开侧边栏
 chrome.runtime.onInstalled.addListener(() => {
@@ -13,9 +13,10 @@ chrome.action.onClicked.addListener((tab) => {
   }
 });
 
-/** 找一个已经开着的创作平台标签页，没有就新建 */
-async function ensureCreatorTab(): Promise<chrome.tabs.Tab> {
-  const existing = await chrome.tabs.query({ url: 'https://creator.xiaohongshu.com/publish/*' });
+/** 找一个已经开着的发布页标签，没有就新建 */
+async function ensureCreatorTab(platform: PlatformId): Promise<chrome.tabs.Tab> {
+  const target = PUBLISH_TARGETS[platform];
+  const existing = await chrome.tabs.query({ url: target.match });
   if (existing.length > 0 && existing[0].id !== undefined) {
     await chrome.tabs.update(existing[0].id, { active: true });
     if (existing[0].windowId !== undefined) {
@@ -23,7 +24,7 @@ async function ensureCreatorTab(): Promise<chrome.tabs.Tab> {
     }
     return existing[0];
   }
-  return chrome.tabs.create({ url: CREATOR_URL, active: true });
+  return chrome.tabs.create({ url: target.url, active: true });
 }
 
 /** 等标签页加载完成，避免 content script 还没注入就发消息 */
@@ -54,15 +55,18 @@ function waitForTabReady(tabId: number, timeoutMs = 20000): Promise<void> {
   });
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((raw, _sender, sendResponse) => {
+  const message = raw as PanelToBackground | undefined;
   if (message?.type !== 'TEXTPIC_PUBLISH') return false;
+  // 老版本侧边栏发来的消息没带平台，按小红书处理
+  const platform: PlatformId = message.platform in PUBLISH_TARGETS ? message.platform : 'xiaohongshu';
 
   (async () => {
     try {
-      const tab = await ensureCreatorTab();
+      const tab = await ensureCreatorTab(platform);
       if (tab.id === undefined) throw new Error('无法打开创作平台标签页');
       await waitForTabReady(tab.id);
-      const result = await chrome.tabs.sendMessage(tab.id, { type: 'TEXTPIC_FILL' });
+      const result = await chrome.tabs.sendMessage(tab.id, { type: 'TEXTPIC_FILL', platform });
       sendResponse(result);
     } catch (err) {
       sendResponse({
